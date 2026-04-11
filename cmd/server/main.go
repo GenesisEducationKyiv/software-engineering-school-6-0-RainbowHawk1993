@@ -22,6 +22,7 @@ import (
 	"releasesapi/internal/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -58,8 +59,20 @@ func run(logger *log.Logger) error {
 		return err
 	}
 
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	defer redisClient.Close()
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		return err
+	}
+
 	subscriptionStore := store.NewPostgresSubscriptionStore(db)
-	githubClient := githubapi.NewClient(cfg.GitHubToken)
+	githubCache := githubapi.NewRedisCache(redisClient)
+	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache)
 	smtpMailer := mailer.NewSMTPMailer(cfg.SMTP)
 	subscriptionService := service.NewSubscriptionService(subscriptionStore, githubClient, smtpMailer, cfg.AppBaseURL)
 	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, logger, cfg.AppBaseURL)

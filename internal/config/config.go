@@ -10,6 +10,12 @@ import (
 	"releasesapi/internal/mailer"
 )
 
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
+}
+
 type Config struct {
 	Port         string
 	GRPCPort     string
@@ -18,6 +24,7 @@ type Config struct {
 	AppBaseURL   string
 	ScanInterval time.Duration
 	SMTP         mailer.SMTPConfig
+	Redis        RedisConfig
 }
 
 func Load() (Config, error) {
@@ -39,6 +46,15 @@ func Load() (Config, error) {
 		smtpPort = parsed
 	}
 
+	redisDB := 0
+	if raw := strings.TrimSpace(os.Getenv("REDIS_DB")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse REDIS_DB: %w", err)
+		}
+		redisDB = parsed
+	}
+
 	return Config{
 		Port:         valueOrDefault("PORT", "8080"),
 		GRPCPort:     valueOrDefault("GRPC_PORT", "9090"),
@@ -52,6 +68,11 @@ func Load() (Config, error) {
 			Username: strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
 			Password: strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
 			From:     valueOrDefault("SMTP_FROM", "noreply@releases-api.local"),
+		},
+		Redis: RedisConfig{
+			Addr:     valueOrDefault("REDIS_ADDR", "redis:6379"),
+			Password: strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
+			DB:       redisDB,
 		},
 	}, nil
 }

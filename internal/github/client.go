@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,13 +18,15 @@ const baseURL = "https://api.github.com"
 type Client struct {
 	baseURL    string
 	token      string
+	cache      Cache
 	httpClient *http.Client
 }
 
-func NewClient(token string) *Client {
+func NewClient(token string, cache Cache) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   strings.TrimSpace(token),
+		cache:   cache,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -31,6 +34,18 @@ func NewClient(token string) *Client {
 }
 
 func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
+	if c.cache != nil {
+		exists, err := c.cache.GetRepoExists(ctx, owner, repo)
+		switch {
+		case err == nil && exists:
+			return nil
+		case err == nil && !exists:
+			return apperr.ErrRepoNotFound
+		case errors.Is(err, errCacheMiss):
+		case err != nil:
+		}
+	}
+
 	response, err := c.doRequest(ctx, fmt.Sprintf("%s/repos/%s/%s", c.baseURL, owner, repo))
 	if err != nil {
 		return err
@@ -39,10 +54,12 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 
 	switch {
 	case response.StatusCode == http.StatusOK:
+		c.cacheRepoExists(ctx, owner, repo, true)
 		return nil
 	case isRateLimited(response):
 		return apperr.ErrRateLimited
 	case response.StatusCode == http.StatusNotFound:
+		c.cacheRepoExists(ctx, owner, repo, false)
 		return apperr.ErrRepoNotFound
 	default:
 		return unexpectedStatus(response)
@@ -50,6 +67,18 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 }
 
 func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (string, error) {
+	if c.cache != nil {
+		tag, found, err := c.cache.GetLatestReleaseTag(ctx, owner, repo)
+		switch {
+		case err == nil && found:
+			return tag, nil
+		case err == nil && !found:
+			return "", nil
+		case errors.Is(err, errCacheMiss):
+		case err != nil:
+		}
+	}
+
 	response, err := c.doRequest(ctx, fmt.Sprintf("%s/repos/%s/%s/releases?per_page=1", c.baseURL, owner, repo))
 	if err != nil {
 		return "", err
@@ -66,9 +95,11 @@ func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (stri
 			return "", err
 		}
 		if len(releases) == 0 {
+			c.cacheLatestRelease(ctx, owner, repo, "", false)
 			return "", nil
 		}
 
+		c.cacheLatestRelease(ctx, owner, repo, releases[0].TagName, true)
 		return releases[0].TagName, nil
 	case isRateLimited(response):
 		return "", apperr.ErrRateLimited
@@ -114,6 +145,20 @@ func unexpectedStatus(response *http.Response) error {
 	}
 
 	return fmt.Errorf("github unexpected status %d: %s", response.StatusCode, message)
+}
+
+func (c *Client) cacheRepoExists(ctx context.Context, owner, repo string, exists bool) {
+	if c.cache == nil {
+		return
+	}
+	_ = c.cache.SetRepoExists(ctx, owner, repo, exists)
+}
+
+func (c *Client) cacheLatestRelease(ctx context.Context, owner, repo, tag string, found bool) {
+	if c.cache == nil {
+		return
+	}
+	_ = c.cache.SetLatestReleaseTag(ctx, owner, repo, tag, found)
 }
 
 var _ interface {

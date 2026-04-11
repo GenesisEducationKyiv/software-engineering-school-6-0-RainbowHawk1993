@@ -7,6 +7,7 @@ Single-service Go API for email subscriptions to GitHub repository releases. The
 - Go with `chi`
 - gRPC alongside REST
 - PostgreSQL
+- Redis for GitHub API caching
 - Docker / Docker Compose
 - Mailpit for local SMTP capture
 
@@ -22,6 +23,7 @@ Services:
 - gRPC: `localhost:9090`
 - Mailpit UI: `http://localhost:8025`
 - PostgreSQL: `localhost:5435`
+- Redis: internal service `redis:6379`
 
 The project serves a small HTML UI at `http://localhost:8080` for creating, viewing, and unsubscribing subscriptions in the browser.
 
@@ -37,6 +39,9 @@ Copy `.env.example` to `.env` if you need custom settings. Important variables:
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_FROM`
+- `REDIS_ADDR`
+- `REDIS_PASSWORD`
+- `REDIS_DB`
 
 ## API
 
@@ -84,6 +89,7 @@ grpcurl -plaintext \
 - Database migrations run automatically on service startup.
 - `last_seen_tag` is seeded from the current latest release during subscription creation so existing releases do not trigger an immediate notification.
 - Confirmed subscriptions only are scanned for release notifications.
+- GitHub repo existence and latest-release responses are cached in Redis for 10 minutes.
 
 ## Testing
 
