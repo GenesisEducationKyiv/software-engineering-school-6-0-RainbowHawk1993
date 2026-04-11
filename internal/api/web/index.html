@@ -211,6 +211,16 @@
 
         <div class="grid">
             <section>
+                <h2>API Key</h2>
+                <label for="api-key">Header value for <code>X-API-Key</code></label>
+                <input id="api-key" name="api-key" type="password" placeholder="paste your API key">
+
+                <button type="button" id="save-api-key">Save API Key</button>
+                <div id="api-key-status" class="status"></div>
+                <p class="hint">The browser UI stores the API key locally and sends it on protected requests.</p>
+            </section>
+
+            <section>
                 <h2>Create Subscription</h2>
                 <form id="subscribe-form">
                     <label for="subscribe-email">Email</label>
@@ -246,17 +256,36 @@
         const lookupForm = document.getElementById("lookup-form");
         const lookupStatus = document.getElementById("lookup-status");
         const lookupResults = document.getElementById("lookup-results");
+        const apiKeyInput = document.getElementById("api-key");
+        const apiKeyStatus = document.getElementById("api-key-status");
+        const saveAPIKeyButton = document.getElementById("save-api-key");
+        const storageKey = "releases_api_key";
 
         function setStatus(node, type, message) {
             node.className = "status" + (type ? " " + type : "");
             node.textContent = message || "";
         }
 
+        function getAPIKey() {
+            return localStorage.getItem(storageKey) || "";
+        }
+
+        function authHeaders(extraHeaders = {}) {
+            const apiKey = getAPIKey();
+            if (!apiKey) {
+                return extraHeaders;
+            }
+
+            return { ...extraHeaders, "X-API-Key": apiKey };
+        }
+
         async function loadSubscriptions(email, successMessage) {
             lookupResults.innerHTML = "";
             setStatus(lookupStatus, "", "Loading...");
 
-            const response = await fetch("/ui/subscriptions?email=" + encodeURIComponent(email));
+            const response = await fetch("/ui/subscriptions?email=" + encodeURIComponent(email), {
+                headers: authHeaders()
+            });
             const data = await response.json();
             if (!response.ok) {
                 setStatus(lookupStatus, "error", data.message || "Lookup failed.");
@@ -291,7 +320,9 @@
                     setStatus(lookupStatus, "", `Unsubscribing from ${item.repo}...`);
 
                     try {
-                        const response = await fetch("/api/unsubscribe/" + encodeURIComponent(item.unsubscribe_token));
+                        const response = await fetch("/api/unsubscribe/" + encodeURIComponent(item.unsubscribe_token), {
+                            headers: authHeaders()
+                        });
                         const data = await response.json();
                         if (!response.ok) {
                             setStatus(lookupStatus, "error", data.message || "Unsubscribe failed.");
@@ -321,7 +352,7 @@
             try {
                 const response = await fetch("/api/subscribe", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: authHeaders({ "Content-Type": "application/json" }),
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();
@@ -337,6 +368,12 @@
             }
         });
 
+        saveAPIKeyButton.addEventListener("click", () => {
+            const value = apiKeyInput.value.trim();
+            localStorage.setItem(storageKey, value);
+            setStatus(apiKeyStatus, "ok", value ? "API key saved." : "API key cleared.");
+        });
+
         lookupForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const email = lookupForm.email.value.trim();
@@ -347,6 +384,12 @@
                 setStatus(lookupStatus, "error", "Request failed. Check that the service is running.");
             }
         });
+
+        const initialKey = getAPIKey();
+        if (initialKey) {
+            apiKeyInput.value = initialKey;
+            setStatus(apiKeyStatus, "ok", "Using saved API key.");
+        }
     </script>
 </body>
 

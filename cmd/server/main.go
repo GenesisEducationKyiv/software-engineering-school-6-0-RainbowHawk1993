@@ -89,7 +89,7 @@ func run(logger *log.Logger) error {
 		}
 	}()
 
-	router := api.NewRouter(api.NewHandler(subscriptionService), logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	router := api.NewRouter(api.NewHandler(subscriptionService), logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), cfg.APIKey)
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
@@ -102,7 +102,7 @@ func run(logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcapi.UnaryAPIKeyInterceptor(cfg.APIKey)))
 	grpcHandler := grpcapi.NewServer(subscriptionService)
 	releasev1.RegisterSubscriptionServiceServer(grpcServer, grpcHandler)
 	reflection.Register(grpcServer)

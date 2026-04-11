@@ -23,7 +23,7 @@ func TestHomeServesHTMLPage(t *testing.T) {
 	if contentType := response.Header.Get("Content-Type"); !strings.Contains(contentType, "text/html") {
 		t.Fatalf("expected text/html content type, got %q", contentType)
 	}
-	if !strings.Contains(recorder.Body.String(), "Create Subscription") {
+	if !strings.Contains(recorder.Body.String(), "API Key") {
 		t.Fatalf("expected subscription page content, got %q", recorder.Body.String())
 	}
 }

@@ -34,6 +34,7 @@ Copy `.env.example` to `.env` if you need custom settings. Important variables:
 
 - `DATABASE_URL`
 - `GRPC_PORT`
+- `API_KEY`
 - `APP_BASE_URL`
 - `GITHUB_TOKEN`
 - `SCAN_INTERVAL`
@@ -50,14 +51,15 @@ Copy `.env.example` to `.env` if you need custom settings. Important variables:
 - `GET /api/confirm/{token}`
 - `GET /api/unsubscribe/{token}`
 - `GET /api/subscriptions?email={email}`
-
 - `GET /ui/subscriptions?email={email}` returns browser-oriented subscription data used by the HTML UI, including unsubscribe tokens for each listed subscription.
 
+All REST endpoints above require the `X-API-Key` header.
 
 Example subscription request:
 
 ```bash
 curl -X POST http://localhost:8080/api/subscribe \
+  -H 'X-API-Key: dev-api-key' \
   -H 'Content-Type: application/json' \
   -d '{"email":"user@example.com","repo":"microsoft/vscode"}'
 ```
@@ -65,17 +67,20 @@ curl -X POST http://localhost:8080/api/subscribe \
 Example see subscriptions request:
 
 ```bash
-curl "http://localhost:8080/api/subscriptions?email=user@example.com"
+curl -H 'X-API-Key: dev-api-key' \
+  "http://localhost:8080/api/subscriptions?email=user@example.com"
 ```
 
 ## gRPC
 
 The service also exposes gRPC with server reflection enabled on `localhost:9090`.
+All gRPC methods require metadata header `x-api-key`.
 
 Example with `grpcurl`:
 
 ```bash
 grpcurl -plaintext \
+  -H 'x-api-key: dev-api-key' \
   -d '{"email":"user@example.com","repo":"microsoft/vscode"}' \
   localhost:9090 releasesapi.v1.SubscriptionService/Subscribe
 ```
@@ -84,6 +89,7 @@ List subscriptions with gRPC:
 
 ```bash
 grpcurl -plaintext \
+  -H 'x-api-key: dev-api-key' \
   -d '{"email":"user@example.com"}' \
   localhost:9090 releasesapi.v1.SubscriptionService/GetSubscriptions
 ```
@@ -95,6 +101,7 @@ grpcurl -plaintext \
 - Confirmed subscriptions only are scanned for release notifications.
 - GitHub repo existence and latest-release responses are cached in Redis for 10 minutes.
 - Prometheus metrics are exposed at `/metrics` with HTTP, GitHub, scanner, and notification counters.
+- Protected endpoints use API key auth; the default local key is `dev-api-key` unless overridden with `API_KEY`.
 
 ## Testing
 

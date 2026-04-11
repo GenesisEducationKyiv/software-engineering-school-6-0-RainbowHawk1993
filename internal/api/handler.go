@@ -54,19 +54,20 @@ func NewHandler(subscriptions SubscriptionUseCase) *Handler {
 	return &Handler{subscriptions: subscriptions}
 }
 
-func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler) http.Handler {
+func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler, apiKey string) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
 	router.Use(metricsMiddleware(metrics))
 	router.Get("/", handler.Home)
-	router.Get("/ui/subscriptions", handler.ListUISubscriptions)
+	router.With(apiKeyMiddleware(apiKey)).Get("/ui/subscriptions", handler.ListUISubscriptions)
 	if metricsHandler != nil {
-		router.Handle("/metrics", metricsHandler)
+		router.With(apiKeyMiddleware(apiKey)).Handle("/metrics", metricsHandler)
 	}
 
 	router.Route("/api", func(r chi.Router) {
+		r.Use(apiKeyMiddleware(apiKey))
 		r.Post("/subscribe", handler.Subscribe)
 		r.Get("/confirm/{token}", handler.Confirm)
 		r.Get("/unsubscribe/{token}", handler.Unsubscribe)

@@ -19,6 +19,7 @@ type RedisConfig struct {
 type Config struct {
 	Port         string
 	GRPCPort     string
+	APIKey       string
 	DatabaseURL  string
 	GitHubToken  string
 	AppBaseURL   string
@@ -58,6 +59,7 @@ func Load() (Config, error) {
 	return Config{
 		Port:         valueOrDefault("PORT", "8080"),
 		GRPCPort:     valueOrDefault("GRPC_PORT", "9090"),
+		APIKey:       valueOrDefault("API_KEY", "dev-api-key"),
 		DatabaseURL:  valueOrDefault("DATABASE_URL", "postgres://postgres:postgres@db:5432/releases?sslmode=disable"),
 		GitHubToken:  strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),
 		AppBaseURL:   strings.TrimRight(valueOrDefault("APP_BASE_URL", "http://localhost:8080"), "/"),
