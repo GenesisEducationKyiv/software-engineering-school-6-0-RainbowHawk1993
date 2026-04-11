@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"releasesapi/internal/apperr"
+	appmetrics "releasesapi/internal/metrics"
 	"releasesapi/internal/model"
 
 	"github.com/go-chi/chi/v5"
@@ -53,13 +54,17 @@ func NewHandler(subscriptions SubscriptionUseCase) *Handler {
 	return &Handler{subscriptions: subscriptions}
 }
 
-func NewRouter(handler *Handler, logger *log.Logger) http.Handler {
+func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
+	router.Use(metricsMiddleware(metrics))
 	router.Get("/", handler.Home)
 	router.Get("/ui/subscriptions", handler.ListUISubscriptions)
+	if metricsHandler != nil {
+		router.Handle("/metrics", metricsHandler)
+	}
 
 	router.Route("/api", func(r chi.Router) {
 		r.Post("/subscribe", handler.Subscribe)

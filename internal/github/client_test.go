@@ -54,7 +54,7 @@ func TestRepoExistsUsesCacheHit(t *testing.T) {
 	t.Parallel()
 
 	cache := &fakeCache{repoValue: true}
-	client := NewClient("", cache)
+	client := NewClient("", cache, nil)
 	called := false
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -75,7 +75,7 @@ func TestRepoExistsCachesNotFound(t *testing.T) {
 	t.Parallel()
 
 	cache := &fakeCache{repoErr: errCacheMiss}
-	client := NewClient("", cache)
+	client := NewClient("", cache, nil)
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{
@@ -102,7 +102,7 @@ func TestLatestReleaseTagUsesCacheHit(t *testing.T) {
 		releaseTag:   "v1.2.3",
 		releaseFound: true,
 	}
-	client := NewClient("", cache)
+	client := NewClient("", cache, nil)
 	called := false
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -127,7 +127,7 @@ func TestLatestReleaseTagCachesNoRelease(t *testing.T) {
 	t.Parallel()
 
 	cache := &fakeCache{releaseErr: errCacheMiss}
-	client := NewClient("", cache)
+	client := NewClient("", cache, nil)
 	client.httpClient = &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return &http.Response{

@@ -20,6 +20,7 @@ docker compose up --build
 Services:
 
 - API: `http://localhost:8080`
+- Prometheus metrics: `http://localhost:8080/metrics`
 - gRPC: `localhost:9090`
 - Mailpit UI: `http://localhost:8025`
 - PostgreSQL: `localhost:5435`
@@ -49,6 +50,9 @@ Copy `.env.example` to `.env` if you need custom settings. Important variables:
 - `GET /api/confirm/{token}`
 - `GET /api/unsubscribe/{token}`
 - `GET /api/subscriptions?email={email}`
+
+- `GET /ui/subscriptions?email={email}` returns browser-oriented subscription data used by the HTML UI, including unsubscribe tokens for each listed subscription.
+
 
 Example subscription request:
 
@@ -90,6 +94,7 @@ grpcurl -plaintext \
 - `last_seen_tag` is seeded from the current latest release during subscription creation so existing releases do not trigger an immediate notification.
 - Confirmed subscriptions only are scanned for release notifications.
 - GitHub repo existence and latest-release responses are cached in Redis for 10 minutes.
+- Prometheus metrics are exposed at `/metrics` with HTTP, GitHub, scanner, and notification counters.
 
 ## Testing
 

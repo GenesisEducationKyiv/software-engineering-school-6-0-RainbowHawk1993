@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"releasesapi/internal/apperr"
+	appmetrics "releasesapi/internal/metrics"
 )
 
 const baseURL = "https://api.github.com"
@@ -19,14 +20,16 @@ type Client struct {
 	baseURL    string
 	token      string
 	cache      Cache
+	metrics    *appmetrics.ServiceMetrics
 	httpClient *http.Client
 }
 
-func NewClient(token string, cache Cache) *Client {
+func NewClient(token string, cache Cache, metrics *appmetrics.ServiceMetrics) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   strings.TrimSpace(token),
 		cache:   cache,
+		metrics: metrics,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -38,11 +41,15 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 		exists, err := c.cache.GetRepoExists(ctx, owner, repo)
 		switch {
 		case err == nil && exists:
+			c.observeGitHub("repo_exists", "cache", "hit_exists")
 			return nil
 		case err == nil && !exists:
+			c.observeGitHub("repo_exists", "cache", "hit_not_found")
 			return apperr.ErrRepoNotFound
 		case errors.Is(err, errCacheMiss):
+			c.observeGitHub("repo_exists", "cache", "miss")
 		case err != nil:
+			c.observeGitHub("repo_exists", "cache", "error")
 		}
 	}
 
@@ -55,13 +62,17 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 	switch {
 	case response.StatusCode == http.StatusOK:
 		c.cacheRepoExists(ctx, owner, repo, true)
+		c.observeGitHub("repo_exists", "api", "ok")
 		return nil
 	case isRateLimited(response):
+		c.observeGitHub("repo_exists", "api", "rate_limited")
 		return apperr.ErrRateLimited
 	case response.StatusCode == http.StatusNotFound:
 		c.cacheRepoExists(ctx, owner, repo, false)
+		c.observeGitHub("repo_exists", "api", "not_found")
 		return apperr.ErrRepoNotFound
 	default:
+		c.observeGitHub("repo_exists", "api", "error")
 		return unexpectedStatus(response)
 	}
 }
@@ -71,11 +82,15 @@ func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (stri
 		tag, found, err := c.cache.GetLatestReleaseTag(ctx, owner, repo)
 		switch {
 		case err == nil && found:
+			c.observeGitHub("latest_release", "cache", "hit_release")
 			return tag, nil
 		case err == nil && !found:
+			c.observeGitHub("latest_release", "cache", "hit_empty")
 			return "", nil
 		case errors.Is(err, errCacheMiss):
+			c.observeGitHub("latest_release", "cache", "miss")
 		case err != nil:
+			c.observeGitHub("latest_release", "cache", "error")
 		}
 	}
 
@@ -92,20 +107,26 @@ func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (stri
 		}
 
 		if err := json.NewDecoder(response.Body).Decode(&releases); err != nil {
+			c.observeGitHub("latest_release", "api", "error")
 			return "", err
 		}
 		if len(releases) == 0 {
 			c.cacheLatestRelease(ctx, owner, repo, "", false)
+			c.observeGitHub("latest_release", "api", "empty")
 			return "", nil
 		}
 
 		c.cacheLatestRelease(ctx, owner, repo, releases[0].TagName, true)
+		c.observeGitHub("latest_release", "api", "ok")
 		return releases[0].TagName, nil
 	case isRateLimited(response):
+		c.observeGitHub("latest_release", "api", "rate_limited")
 		return "", apperr.ErrRateLimited
 	case response.StatusCode == http.StatusNotFound:
+		c.observeGitHub("latest_release", "api", "not_found")
 		return "", apperr.ErrRepoNotFound
 	default:
+		c.observeGitHub("latest_release", "api", "error")
 		return "", unexpectedStatus(response)
 	}
 }
@@ -159,6 +180,13 @@ func (c *Client) cacheLatestRelease(ctx context.Context, owner, repo, tag string
 		return
 	}
 	_ = c.cache.SetLatestReleaseTag(ctx, owner, repo, tag, found)
+}
+
+func (c *Client) observeGitHub(operation, source, outcome string) {
+	if c.metrics == nil {
+		return
+	}
+	c.metrics.ObserveGitHubRequest(operation, source, outcome)
 }
 
 var _ interface {

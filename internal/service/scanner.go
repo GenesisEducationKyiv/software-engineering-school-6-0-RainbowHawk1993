@@ -9,6 +9,7 @@ import (
 
 	"releasesapi/internal/apperr"
 	"releasesapi/internal/mailer"
+	appmetrics "releasesapi/internal/metrics"
 	"releasesapi/internal/model"
 )
 
@@ -18,9 +19,10 @@ type Scanner struct {
 	mailer  Mailer
 	logger  *log.Logger
 	baseURL string
+	metrics *appmetrics.ServiceMetrics
 }
 
-func NewScanner(store SubscriptionStore, github GitHubClient, mailer Mailer, logger *log.Logger, baseURL string) *Scanner {
+func NewScanner(store SubscriptionStore, github GitHubClient, mailer Mailer, logger *log.Logger, baseURL string, metrics *appmetrics.ServiceMetrics) *Scanner {
 	if logger == nil {
 		logger = log.New(nilWriter{}, "", 0)
 	}
@@ -31,6 +33,7 @@ func NewScanner(store SubscriptionStore, github GitHubClient, mailer Mailer, log
 		mailer:  mailer,
 		logger:  logger,
 		baseURL: strings.TrimRight(baseURL, "/"),
+		metrics: metrics,
 	}
 }
 
@@ -61,6 +64,7 @@ func (s *Scanner) Run(ctx context.Context, interval time.Duration) error {
 func (s *Scanner) RunOnce(ctx context.Context) error {
 	subscriptions, err := s.store.ListConfirmedForScan(ctx)
 	if err != nil {
+		s.observeScannerRun("error")
 		return err
 	}
 
@@ -70,6 +74,9 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 	}
 
 	for _, group := range repoGroups {
+		if s.metrics != nil {
+			s.metrics.ScannerRepositoriesTotal.Inc()
+		}
 		repoOwner := group[0].RepoOwner
 		repoName := group[0].RepoName
 
@@ -108,8 +115,14 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 			}
 
 			if err := s.mailer.Send(ctx, message); err != nil {
+				if s.metrics != nil {
+					s.metrics.NotificationsFailedTotal.Inc()
+				}
 				s.logger.Printf("email send failed for %s: %v", subscription.Email, err)
 				continue
+			}
+			if s.metrics != nil {
+				s.metrics.NotificationsSentTotal.Inc()
 			}
 
 			if err := s.store.UpdateLastSeenTag(ctx, subscription.ID, tag); err != nil {
@@ -118,7 +131,15 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 		}
 	}
 
+	s.observeScannerRun("success")
 	return nil
+}
+
+func (s *Scanner) observeScannerRun(outcome string) {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.ObserveScannerRun(outcome)
 }
 
 func isScannerSoftError(err error) bool {

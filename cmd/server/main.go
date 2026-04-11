@@ -17,11 +17,13 @@ import (
 	githubapi "releasesapi/internal/github"
 	"releasesapi/internal/grpcapi"
 	"releasesapi/internal/mailer"
+	appmetrics "releasesapi/internal/metrics"
 	"releasesapi/internal/migrations"
 	"releasesapi/internal/service"
 	"releasesapi/internal/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -44,6 +46,10 @@ func run(logger *log.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	registry, serviceMetrics := appmetrics.NewRegistry()
+	serviceMetrics.ServiceUp.Set(1)
+	defer serviceMetrics.ServiceUp.Set(0)
 
 	db, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -72,10 +78,10 @@ func run(logger *log.Logger) error {
 
 	subscriptionStore := store.NewPostgresSubscriptionStore(db)
 	githubCache := githubapi.NewRedisCache(redisClient)
-	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache)
+	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache, serviceMetrics)
 	smtpMailer := mailer.NewSMTPMailer(cfg.SMTP)
 	subscriptionService := service.NewSubscriptionService(subscriptionStore, githubClient, smtpMailer, cfg.AppBaseURL)
-	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, logger, cfg.AppBaseURL)
+	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, logger, cfg.AppBaseURL, serviceMetrics)
 
 	go func() {
 		if err := scanner.Run(ctx, cfg.ScanInterval); err != nil && !errors.Is(err, context.Canceled) {
@@ -83,7 +89,7 @@ func run(logger *log.Logger) error {
 		}
 	}()
 
-	router := api.NewRouter(api.NewHandler(subscriptionService), logger)
+	router := api.NewRouter(api.NewHandler(subscriptionService), logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	server := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,

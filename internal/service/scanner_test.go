@@ -22,7 +22,7 @@ func TestScannerRunOnceSendsNotificationsForNewTags(t *testing.T) {
 	}
 	github := &fakeGitHub{latestTag: "v2.0.0"}
 	mailer := &fakeMailer{}
-	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080")
+	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
@@ -46,7 +46,7 @@ func TestScannerSkipsStateUpdateOnMailerFailure(t *testing.T) {
 	}
 	github := &fakeGitHub{latestTag: "v1.0.0"}
 	mailer := &fakeMailer{err: errors.New("smtp down")}
-	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080")
+	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
