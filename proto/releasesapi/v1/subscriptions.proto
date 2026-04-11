@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package releasesapi.v1;
+
+option go_package = "releasesapi/gen/releasev1;releasev1";
+
+service SubscriptionService {
+  rpc Subscribe(SubscribeRequest) returns (MessageReply);
+  rpc ConfirmSubscription(TokenRequest) returns (MessageReply);
+  rpc Unsubscribe(TokenRequest) returns (MessageReply);
+  rpc GetSubscriptions(GetSubscriptionsRequest) returns (GetSubscriptionsResponse);
+}
+
+message SubscribeRequest {
+  string email = 1;
+  string repo = 2;
+}
+
+message TokenRequest {
+  string token = 1;
+}
+
+message GetSubscriptionsRequest {
+  string email = 1;
+}
+
+message MessageReply {
+  string message = 1;
+}
+
+message Subscription {
+  string email = 1;
+  string repo = 2;
+  bool confirmed = 3;
+  string last_seen_tag = 4;
+}
+
+message GetSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+}

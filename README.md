@@ -5,6 +5,7 @@ Single-service Go API for email subscriptions to GitHub repository releases. The
 ## Stack
 
 - Go with `chi`
+- gRPC alongside REST
 - PostgreSQL
 - Docker / Docker Compose
 - Mailpit for local SMTP capture
@@ -18,6 +19,7 @@ docker compose up --build
 Services:
 
 - API: `http://localhost:8080`
+- gRPC: `localhost:9090`
 - Mailpit UI: `http://localhost:8025`
 - PostgreSQL: `localhost:5435`
 
@@ -28,6 +30,7 @@ The project serves a small HTML UI at `http://localhost:8080` for creating, view
 Copy `.env.example` to `.env` if you need custom settings. Important variables:
 
 - `DATABASE_URL`
+- `GRPC_PORT`
 - `APP_BASE_URL`
 - `GITHUB_TOKEN`
 - `SCAN_INTERVAL`
@@ -56,6 +59,25 @@ Example see subscriptions request:
 curl "http://localhost:8080/api/subscriptions?email=user@example.com"
 ```
 
+## gRPC
+
+The service also exposes gRPC with server reflection enabled on `localhost:9090`.
+
+Example with `grpcurl`:
+
+```bash
+grpcurl -plaintext \
+  -d '{"email":"user@example.com","repo":"microsoft/vscode"}' \
+  localhost:9090 releasesapi.v1.SubscriptionService/Subscribe
+```
+
+List subscriptions with gRPC:
+
+```bash
+grpcurl -plaintext \
+  -d '{"email":"user@example.com"}' \
+  localhost:9090 releasesapi.v1.SubscriptionService/GetSubscriptions
+```
 
 ## Development Notes
 

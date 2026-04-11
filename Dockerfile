@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS base
+FROM golang:1.24-alpine AS base
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,5 +17,5 @@ RUN adduser -D -g '' appuser
 USER appuser
 WORKDIR /app
 COPY --from=build /bin/releases-api /app/releases-api
-EXPOSE 8080
+EXPOSE 8080 9090
 ENTRYPOINT ["/app/releases-api"]

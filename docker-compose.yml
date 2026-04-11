@@ -10,6 +10,7 @@ services:
         condition: service_started
     environment:
       PORT: ${PORT:-8080}
+      GRPC_PORT: ${GRPC_PORT:-9090}
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/releases?sslmode=disable}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
@@ -21,6 +22,7 @@ services:
       SMTP_FROM: ${SMTP_FROM:-noreply@releases-api.local}
     ports:
       - "8080:8080"
+      - "9090:9090"
 
   db:
     image: postgres:16-alpine

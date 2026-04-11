@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -8,14 +9,20 @@ import (
 
 	"releasesapi/internal/apperr"
 	"releasesapi/internal/model"
-	"releasesapi/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+type SubscriptionUseCase interface {
+	Subscribe(rctx context.Context, email, repo string) (model.Subscription, error)
+	Confirm(ctx context.Context, token string) (model.Subscription, error)
+	Unsubscribe(ctx context.Context, token string) error
+	ListByEmail(ctx context.Context, email string) ([]model.Subscription, error)
+}
+
 type Handler struct {
-	subscriptions *service.SubscriptionService
+	subscriptions SubscriptionUseCase
 }
 
 type subscribeRequest struct {
@@ -42,7 +49,7 @@ type uiSubscriptionResponse struct {
 	UnsubscribeToken string `json:"unsubscribe_token"`
 }
 
-func NewHandler(subscriptions *service.SubscriptionService) *Handler {
+func NewHandler(subscriptions SubscriptionUseCase) *Handler {
 	return &Handler{subscriptions: subscriptions}
 }
 

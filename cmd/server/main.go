@@ -4,21 +4,26 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	releasev1 "releasesapi/gen/releasev1"
 	"releasesapi/internal/api"
 	"releasesapi/internal/config"
 	githubapi "releasesapi/internal/github"
+	"releasesapi/internal/grpcapi"
 	"releasesapi/internal/mailer"
 	"releasesapi/internal/migrations"
 	"releasesapi/internal/service"
 	"releasesapi/internal/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -74,22 +79,55 @@ func run(logger *log.Logger) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	serverErr := make(chan error, 1)
+	grpcListener, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return err
+	}
+	grpcServer := grpc.NewServer()
+	grpcHandler := grpcapi.NewServer(subscriptionService)
+	releasev1.RegisterSubscriptionServiceServer(grpcServer, grpcHandler)
+	reflection.Register(grpcServer)
+
+	serverErr := make(chan error, 2)
 	go func() {
-		logger.Printf("listening on :%s", cfg.Port)
+		logger.Printf("http listening on :%s", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+	go func() {
+		logger.Printf("grpc listening on :%s", cfg.GRPCPort)
+		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			serverErr <- err
 		}
 	}()
 
 	select {
 	case err := <-serverErr:
+		grpcServer.Stop()
+		_ = grpcListener.Close()
 		return err
 	case <-ctx.Done():
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	grpcStopped := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(grpcStopped)
+	}()
+
+	select {
+	case <-grpcStopped:
+	case <-shutdownCtx.Done():
+		grpcServer.Stop()
+	}
+
+	if err := grpcListener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		return err
+	}
 
 	return server.Shutdown(shutdownCtx)
 }
