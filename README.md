@@ -1,6 +1,6 @@
 # GitHub Release Notification API
 
-Single-service Go API for email subscriptions to GitHub repository releases. The service validates repositories through the GitHub API, stores subscriptions in PostgreSQL, sends confirmation and release emails through SMTP, and scans for new releases on a fixed interval.
+Single-service Go API for email subscriptions to GitHub repository releases. The service validates repositories through the GitHub API, stores subscriptions in PostgreSQL, sends confirmation and release emails through SMTP, and scans for new releases on a fixed interval. (15 minutes by default)
 
 ## Stack
 
@@ -27,6 +27,8 @@ Services:
 - Redis: internal service `redis:6379`
 
 The project serves a small HTML UI at `http://localhost:8080` for creating, viewing, and unsubscribing subscriptions in the browser.
+
+You will have to provide api key on webpage for requests to go through. By default it is set to `dev-api-key`.
 
 ## Environment
 
