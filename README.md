@@ -21,6 +21,8 @@ Services:
 - Mailpit UI: `http://localhost:8025`
 - PostgreSQL: `localhost:5435`
 
+The project serves a small HTML UI at `http://localhost:8080` for creating, viewing, and unsubscribing subscriptions in the browser.
+
 ## Environment
 
 Copy `.env.example` to `.env` if you need custom settings. Important variables:
@@ -45,8 +47,15 @@ Example subscription request:
 ```bash
 curl -X POST http://localhost:8080/api/subscribe \
   -H 'Content-Type: application/json' \
-  -d '{"email":"user@example.com","repo":"golang/go"}'
+  -d '{"email":"user@example.com","repo":"microsoft/vscode"}'
 ```
+
+Example see subscriptions request:
+
+```bash
+curl "http://localhost:8080/api/subscriptions?email=user@example.com"
+```
+
 
 ## Development Notes
 

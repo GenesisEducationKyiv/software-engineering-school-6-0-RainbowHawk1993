@@ -34,6 +34,14 @@ type subscriptionResponse struct {
 	LastSeenTag string `json:"last_seen_tag"`
 }
 
+type uiSubscriptionResponse struct {
+	Email            string `json:"email"`
+	Repo             string `json:"repo"`
+	Confirmed        bool   `json:"confirmed"`
+	LastSeenTag      string `json:"last_seen_tag"`
+	UnsubscribeToken string `json:"unsubscribe_token"`
+}
+
 func NewHandler(subscriptions *service.SubscriptionService) *Handler {
 	return &Handler{subscriptions: subscriptions}
 }
@@ -43,6 +51,8 @@ func NewRouter(handler *Handler, logger *log.Logger) http.Handler {
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
+	router.Get("/", handler.Home)
+	router.Get("/ui/subscriptions", handler.ListUISubscriptions)
 
 	router.Route("/api", func(r chi.Router) {
 		r.Post("/subscribe", handler.Subscribe)
@@ -111,12 +121,38 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (h *Handler) ListUISubscriptions(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	subscriptions, err := h.subscriptions.ListByEmail(r.Context(), email)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	response := make([]uiSubscriptionResponse, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		response = append(response, toUISubscriptionResponse(subscription))
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
 func toSubscriptionResponse(subscription model.Subscription) subscriptionResponse {
 	return subscriptionResponse{
 		Email:       subscription.Email,
 		Repo:        subscription.Repo(),
 		Confirmed:   subscription.Confirmed,
 		LastSeenTag: subscription.LastSeenTag,
+	}
+}
+
+func toUISubscriptionResponse(subscription model.Subscription) uiSubscriptionResponse {
+	return uiSubscriptionResponse{
+		Email:            subscription.Email,
+		Repo:             subscription.Repo(),
+		Confirmed:        subscription.Confirmed,
+		LastSeenTag:      subscription.LastSeenTag,
+		UnsubscribeToken: subscription.UnsubscribeToken,
 	}
 }
 

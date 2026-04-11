@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Release Watch</title>
+    <style>
+        :root {
+            --bg: #f4efe5;
+            --panel: rgba(255, 252, 246, 0.92);
+            --ink: #1d1a17;
+            --muted: #5d5248;
+            --line: rgba(33, 29, 25, 0.12);
+            --accent: #ca5a2e;
+            --accent-strong: #a94822;
+            --success: #1d6b3b;
+            --error: #a12828;
+            --shadow: 0 24px 70px rgba(70, 47, 26, 0.14);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(202, 90, 46, 0.22), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(103, 134, 94, 0.18), transparent 24%),
+                linear-gradient(135deg, #efe6d7, #fbf8f3 42%, #e8dfd0);
+        }
+
+        main {
+            width: min(1040px, calc(100% - 32px));
+            margin: 48px auto;
+        }
+
+        .hero {
+            padding: 32px;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        .eyebrow {
+            margin: 0 0 12px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            font: 600 12px/1.2 Arial, sans-serif;
+            color: var(--accent-strong);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(2.2rem, 4vw, 4.8rem);
+            line-height: 0.96;
+            max-width: 11ch;
+            font-weight: 700;
+        }
+
+        .lede {
+            max-width: 100ch;
+            margin: 18px 0 0;
+            font-size: 1.08rem;
+            line-height: 1.6;
+            color: var(--muted);
+        }
+
+        .grid {
+            display: grid;
+            gap: 22px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            margin-top: 22px;
+        }
+
+        section {
+            padding: 24px;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        h2 {
+            margin: 0 0 16px;
+            font: 700 1.2rem/1.2 Arial, sans-serif;
+            letter-spacing: 0.01em;
+        }
+
+        label {
+            display: block;
+            margin: 14px 0 8px;
+            font: 600 0.95rem/1.3 Arial, sans-serif;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px 15px;
+            border: 1px solid rgba(29, 26, 23, 0.16);
+            border-radius: 14px;
+            font: 400 1rem/1.3 Arial, sans-serif;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--ink);
+        }
+
+        button {
+            margin-top: 18px;
+            padding: 13px 18px;
+            border: 0;
+            border-radius: 999px;
+            background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+            color: #fffaf5;
+            font: 700 0.95rem/1 Arial, sans-serif;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.03);
+        }
+
+        .status {
+            min-height: 24px;
+            margin-top: 14px;
+            font: 600 0.95rem/1.5 Arial, sans-serif;
+        }
+
+        .status.ok {
+            color: var(--success);
+        }
+
+        .status.error {
+            color: var(--error);
+        }
+
+        .hint {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .results {
+            margin-top: 18px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .subscription {
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid var(--line);
+        }
+
+        .subscription-actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .subscription button {
+            margin-top: 0;
+            padding: 10px 14px;
+            font-size: 0.86rem;
+        }
+
+        .subscription button.secondary {
+            background: linear-gradient(180deg, #6d6258, #4c433c);
+        }
+
+        .repo {
+            font: 700 1rem/1.3 Arial, sans-serif;
+        }
+
+        .meta {
+            margin-top: 6px;
+            color: var(--muted);
+            font: 400 0.95rem/1.45 Arial, sans-serif;
+        }
+
+        @media (max-width: 720px) {
+            main {
+                margin: 22px auto;
+            }
+
+            .hero,
+            section {
+                padding: 20px;
+                border-radius: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div class="hero">
+            <p class="eyebrow">GitHub Release Notification API</p>
+            <h2>Track repo releases by email.</h2>
+            <p class="lede">
+                Subscribe to a repository in <code>owner/repo</code> format, confirm the email in Mailpit, and the
+                service will notify you when a new GitHub release appears.
+            </p>
+        </div>
+
+        <div class="grid">
+            <section>
+                <h2>Create Subscription</h2>
+                <form id="subscribe-form">
+                    <label for="subscribe-email">Email</label>
+                    <input id="subscribe-email" name="email" type="email" placeholder="user@example.com" required>
+
+                    <label for="subscribe-repo">Repository</label>
+                    <input id="subscribe-repo" name="repo" type="text" placeholder="microsoft/vscode" required>
+
+                    <button type="submit">Subscribe</button>
+                </form>
+                <div id="subscribe-status" class="status"></div>
+                <p class="hint">After subscribing, open Mailpit at <code>localhost:8025</code> and confirm the email.
+                </p>
+            </section>
+
+            <section>
+                <h2>View Active Subscriptions</h2>
+                <form id="lookup-form">
+                    <label for="lookup-email">Email</label>
+                    <input id="lookup-email" name="email" type="email" placeholder="user@example.com" required>
+
+                    <button type="submit">Load Subscriptions</button>
+                </form>
+                <div id="lookup-status" class="status"></div>
+                <div id="lookup-results" class="results"></div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const subscribeForm = document.getElementById("subscribe-form");
+        const subscribeStatus = document.getElementById("subscribe-status");
+        const lookupForm = document.getElementById("lookup-form");
+        const lookupStatus = document.getElementById("lookup-status");
+        const lookupResults = document.getElementById("lookup-results");
+
+        function setStatus(node, type, message) {
+            node.className = "status" + (type ? " " + type : "");
+            node.textContent = message || "";
+        }
+
+        async function loadSubscriptions(email, successMessage) {
+            lookupResults.innerHTML = "";
+            setStatus(lookupStatus, "", "Loading...");
+
+            const response = await fetch("/ui/subscriptions?email=" + encodeURIComponent(email));
+            const data = await response.json();
+            if (!response.ok) {
+                setStatus(lookupStatus, "error", data.message || "Lookup failed.");
+                return;
+            }
+
+            setStatus(lookupStatus, "ok", successMessage || "Subscriptions loaded.");
+            renderSubscriptions(data, email);
+        }
+
+        function renderSubscriptions(items, email) {
+            lookupResults.innerHTML = "";
+            if (!items.length) {
+                lookupResults.innerHTML = '<div class="subscription"><div class="meta">No confirmed subscriptions found for this email.</div></div>';
+                return;
+            }
+
+            for (const item of items) {
+                const card = document.createElement("div");
+                card.className = "subscription";
+                card.innerHTML = `
+          <div class="repo">${item.repo}</div>
+          <div class="meta">Confirmed: ${item.confirmed ? "yes" : "no"}</div>
+          <div class="meta">Last seen tag: ${item.last_seen_tag || "not seen yet"}</div>
+          <div class="subscription-actions">
+            <button type="button" class="secondary" data-token="${item.unsubscribe_token}">Unsubscribe</button>
+          </div>
+        `;
+                const button = card.querySelector("button");
+                button.addEventListener("click", async () => {
+                    button.disabled = true;
+                    setStatus(lookupStatus, "", `Unsubscribing from ${item.repo}...`);
+
+                    try {
+                        const response = await fetch("/api/unsubscribe/" + encodeURIComponent(item.unsubscribe_token));
+                        const data = await response.json();
+                        if (!response.ok) {
+                            setStatus(lookupStatus, "error", data.message || "Unsubscribe failed.");
+                            button.disabled = false;
+                            return;
+                        }
+
+                        await loadSubscriptions(email, `Unsubscribed from ${item.repo}.`);
+                    } catch (error) {
+                        setStatus(lookupStatus, "error", "Request failed. Check that the service is running.");
+                        button.disabled = false;
+                    }
+                });
+                lookupResults.appendChild(card);
+            }
+        }
+
+        subscribeForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setStatus(subscribeStatus, "", "Submitting...");
+
+            const payload = {
+                email: subscribeForm.email.value.trim(),
+                repo: subscribeForm.repo.value.trim()
+            };
+
+            try {
+                const response = await fetch("/api/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    setStatus(subscribeStatus, "error", data.message || "Subscription failed.");
+                    return;
+                }
+
+                setStatus(subscribeStatus, "ok", data.message || "Subscription created.");
+                lookupForm.email.value = payload.email;
+            } catch (error) {
+                setStatus(subscribeStatus, "error", "Request failed. Check that the service is running.");
+            }
+        });
+
+        lookupForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const email = lookupForm.email.value.trim();
+
+            try {
+                await loadSubscriptions(email, "Subscriptions loaded.");
+            } catch (error) {
+                setStatus(lookupStatus, "error", "Request failed. Check that the service is running.");
+            }
+        });
+    </script>
+</body>
+
+</html>
