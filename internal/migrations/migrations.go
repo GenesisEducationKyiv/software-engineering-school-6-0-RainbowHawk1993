@@ -48,13 +48,13 @@ func Run(ctx context.Context, db *pgxpool.Pool) error {
 			return err
 		}
 
+		defer func() { _ = tx.Rollback(ctx) }()
+
 		if _, err := tx.Exec(ctx, string(sqlBytes)); err != nil {
-			tx.Rollback(ctx)
 			return fmt.Errorf("apply migration %s: %w", entry, err)
 		}
 
 		if _, err := tx.Exec(ctx, `insert into schema_migrations(version) values ($1)`, entry); err != nil {
-			tx.Rollback(ctx)
 			return err
 		}
 

@@ -81,12 +81,12 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 		repoName := group[0].RepoName
 
 		tag, err := s.github.LatestReleaseTag(ctx, repoOwner, repoName)
-		switch {
-		case err == nil:
-		case err == apperr.ErrRateLimited:
+		switch err {
+		case nil:
+		case apperr.ErrRateLimited:
 			s.logger.Printf("github rate limit reached while scanning %s/%s", repoOwner, repoName)
 			continue
-		case err == apperr.ErrRepoNotFound:
+		case apperr.ErrRepoNotFound:
 			s.logger.Printf("repository missing during scan: %s/%s", repoOwner, repoName)
 			continue
 		default:
