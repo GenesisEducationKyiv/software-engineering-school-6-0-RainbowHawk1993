@@ -17,3 +17,5 @@ We utilize a layered approach:
 ## Consequences
 - **Positive:** Domain logic is decoupled from frameworks, making it easier to mock for testing.
 - **Neutral:** Increases the number of files due to interfaces and struct wrappers.
+
+**Future evolution:** As the project domain expands, we may refactor to a feature-based structure to prevent directory bloat.
