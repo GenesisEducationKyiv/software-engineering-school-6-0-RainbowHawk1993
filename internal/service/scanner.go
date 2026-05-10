@@ -13,8 +13,13 @@ import (
 	"releasesapi/internal/model"
 )
 
+type ScannerStore interface {
+	ListConfirmedForScan(context.Context) ([]model.Subscription, error)
+	UpdateLastSeenTag(context.Context, int64, string) error
+}
+
 type Scanner struct {
-	store   SubscriptionStore
+	store   ScannerStore
 	github  GitHubClient
 	mailer  Mailer
 	logger  *log.Logger
@@ -22,7 +27,7 @@ type Scanner struct {
 	metrics *appmetrics.ServiceMetrics
 }
 
-func NewScanner(store SubscriptionStore, github GitHubClient, mailer Mailer, logger *log.Logger, baseURL string, metrics *appmetrics.ServiceMetrics) *Scanner {
+func NewScanner(store ScannerStore, github GitHubClient, mailer Mailer, logger *log.Logger, baseURL string, metrics *appmetrics.ServiceMetrics) *Scanner {
 	if logger == nil {
 		logger = log.New(nilWriter{}, "", 0)
 	}

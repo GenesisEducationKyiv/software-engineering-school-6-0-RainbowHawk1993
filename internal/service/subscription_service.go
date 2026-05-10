@@ -17,14 +17,12 @@ import (
 
 var tokenPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-type SubscriptionStore interface {
+type SubscriptionManager interface {
 	CreateSubscription(context.Context, store.CreateSubscriptionParams) (model.Subscription, error)
 	DeleteSubscription(context.Context, int64) error
 	ConfirmByToken(context.Context, string) (model.Subscription, error)
 	DeleteByUnsubscribeToken(context.Context, string) error
 	ListConfirmedByEmail(context.Context, string) ([]model.Subscription, error)
-	ListConfirmedForScan(context.Context) ([]model.Subscription, error)
-	UpdateLastSeenTag(context.Context, int64, string) error
 }
 
 type GitHubClient interface {
@@ -37,13 +35,13 @@ type Mailer interface {
 }
 
 type SubscriptionService struct {
-	store   SubscriptionStore
+	store   SubscriptionManager
 	github  GitHubClient
 	mailer  Mailer
 	baseURL string
 }
 
-func NewSubscriptionService(store SubscriptionStore, github GitHubClient, mailer Mailer, baseURL string) *SubscriptionService {
+func NewSubscriptionService(store SubscriptionManager, github GitHubClient, mailer Mailer, baseURL string) *SubscriptionService {
 	return &SubscriptionService{
 		store:   store,
 		github:  github,
