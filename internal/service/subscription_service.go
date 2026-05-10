@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"net/mail"
 	"regexp"
 	"strings"
@@ -38,14 +37,16 @@ type SubscriptionService struct {
 	store   SubscriptionManager
 	github  GitHubClient
 	mailer  Mailer
+	builder mailer.NotificationBuilder
 	baseURL string
 }
 
-func NewSubscriptionService(store SubscriptionManager, github GitHubClient, mailer Mailer, baseURL string) *SubscriptionService {
+func NewSubscriptionService(store SubscriptionManager, github GitHubClient, mailer Mailer, builder mailer.NotificationBuilder, baseURL string) *SubscriptionService {
 	return &SubscriptionService{
 		store:   store,
 		github:  github,
 		mailer:  mailer,
+		builder: builder,
 		baseURL: strings.TrimRight(baseURL, "/"),
 	}
 }
@@ -92,16 +93,7 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email, repo string)
 		return model.Subscription{}, err
 	}
 
-	message := mailer.Message{
-		To:      subscription.Email,
-		Subject: fmt.Sprintf("Confirm release subscription for %s", subscription.Repo()),
-		Body: strings.Join([]string{
-			fmt.Sprintf("Confirm your subscription for %s.", subscription.Repo()),
-			"",
-			fmt.Sprintf("Confirm: %s/api/confirm/%s", s.baseURL, subscription.ConfirmToken),
-			fmt.Sprintf("Unsubscribe: %s/api/unsubscribe/%s", s.baseURL, subscription.UnsubscribeToken),
-		}, "\n"),
-	}
+	message := s.builder.BuildConfirmation(subscription, s.baseURL)
 
 	if err := s.mailer.Send(ctx, message); err != nil {
 		_ = s.store.DeleteSubscription(ctx, subscription.ID)

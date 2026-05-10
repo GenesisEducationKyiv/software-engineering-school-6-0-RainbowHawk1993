@@ -84,8 +84,10 @@ func run(logger *log.Logger) error {
 	githubCache := githubapi.NewRedisCache(redisClient)
 	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache, serviceMetrics, logger)
 	smtpMailer := mailer.NewSMTPMailer(cfg.SMTP)
-	subscriptionService := service.NewSubscriptionService(subscriptionStore, githubClient, smtpMailer, cfg.AppBaseURL)
-	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, logger, cfg.AppBaseURL, serviceMetrics)
+	notificationBuilder := &mailer.DefaultNotificationBuilder{}
+	subscriptionService := service.NewSubscriptionService(subscriptionStore, githubClient, smtpMailer, notificationBuilder, cfg.AppBaseURL)
+	builder := &mailer.DefaultNotificationBuilder{}
+	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, builder, logger, cfg.AppBaseURL, serviceMetrics)
 
 	go func() {
 		if err := scanner.Run(ctx, cfg.ScanInterval); err != nil && !errors.Is(err, context.Canceled) {

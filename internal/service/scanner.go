@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -22,12 +21,13 @@ type Scanner struct {
 	store   ScannerStore
 	github  GitHubClient
 	mailer  Mailer
+	builder mailer.NotificationBuilder
 	logger  *log.Logger
 	baseURL string
 	metrics *appmetrics.ServiceMetrics
 }
 
-func NewScanner(store ScannerStore, github GitHubClient, mailer Mailer, logger *log.Logger, baseURL string, metrics *appmetrics.ServiceMetrics) *Scanner {
+func NewScanner(store ScannerStore, github GitHubClient, mailer Mailer, builder mailer.NotificationBuilder, logger *log.Logger, baseURL string, metrics *appmetrics.ServiceMetrics) *Scanner {
 	if logger == nil {
 		logger = log.New(nilWriter{}, "", 0)
 	}
@@ -36,6 +36,7 @@ func NewScanner(store ScannerStore, github GitHubClient, mailer Mailer, logger *
 		store:   store,
 		github:  github,
 		mailer:  mailer,
+		builder: builder,
 		logger:  logger,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		metrics: metrics,
@@ -104,20 +105,11 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 		}
 
 		for _, subscription := range group {
-			if !subscription.NeedsNotification(tag) {
+			if subscription.LastSeenTag == tag {
 				continue
 			}
 
-			message := mailer.Message{
-				To:      subscription.Email,
-				Subject: fmt.Sprintf("New release for %s: %s", subscription.Repo(), tag),
-				Body: strings.Join([]string{
-					fmt.Sprintf("A new release is available for %s.", subscription.Repo()),
-					fmt.Sprintf("Latest tag: %s", tag),
-					"",
-					fmt.Sprintf("Unsubscribe: %s/api/unsubscribe/%s", s.baseURL, subscription.UnsubscribeToken),
-				}, "\n"),
-			}
+			message := s.builder.BuildReleaseNotification(subscription, tag, s.baseURL)
 
 			if err := s.mailer.Send(ctx, message); err != nil {
 				if s.metrics != nil {
@@ -126,6 +118,7 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 				s.logger.Printf("email send failed for %s: %v", subscription.Email, err)
 				continue
 			}
+
 			if s.metrics != nil {
 				s.metrics.NotificationsSentTotal.Inc()
 			}

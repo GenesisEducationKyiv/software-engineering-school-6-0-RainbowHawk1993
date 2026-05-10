@@ -7,8 +7,23 @@ import (
 	"log"
 	"testing"
 
+	"releasesapi/internal/mailer"
 	"releasesapi/internal/model"
 )
+
+type fakeBuilder struct{}
+
+func (f *fakeBuilder) BuildConfirmation(sub model.Subscription, baseURL string) mailer.Message {
+	return mailer.Message{
+		To:      sub.Email,
+		Subject: "Confirm",
+		Body:    "/api/confirm/ /api/unsubscribe/",
+	}
+}
+
+func (f *fakeBuilder) BuildReleaseNotification(sub model.Subscription, tag, baseURL string) mailer.Message {
+	return mailer.Message{To: sub.Email, Body: "Notification"}
+}
 
 func TestScannerRunOnceSendsNotificationsForNewTags(t *testing.T) {
 	t.Parallel()
@@ -22,7 +37,9 @@ func TestScannerRunOnceSendsNotificationsForNewTags(t *testing.T) {
 	}
 	github := &fakeGitHub{latestTag: "v2.0.0"}
 	mailer := &fakeMailer{}
-	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
+	builder := &fakeBuilder{}
+
+	scanner := NewScanner(store, github, mailer, builder, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
@@ -46,7 +63,9 @@ func TestScannerSkipsStateUpdateOnMailerFailure(t *testing.T) {
 	}
 	github := &fakeGitHub{latestTag: "v1.0.0"}
 	mailer := &fakeMailer{err: errors.New("smtp down")}
-	scanner := NewScanner(store, github, mailer, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
+	builder := &fakeBuilder{}
+
+	scanner := NewScanner(store, github, mailer, builder, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
