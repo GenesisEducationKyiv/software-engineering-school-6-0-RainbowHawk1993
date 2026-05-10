@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -22,14 +23,16 @@ type Client struct {
 	cache      Cache
 	metrics    *appmetrics.ServiceMetrics
 	httpClient *http.Client
+	logger     *log.Logger
 }
 
-func NewClient(token string, cache Cache, metrics *appmetrics.ServiceMetrics) *Client {
+func NewClient(token string, cache Cache, metrics *appmetrics.ServiceMetrics, logger *log.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   strings.TrimSpace(token),
 		cache:   cache,
 		metrics: metrics,
+		logger:  logger,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -57,7 +60,11 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			c.logger.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	switch {
 	case response.StatusCode == http.StatusOK:
@@ -98,7 +105,11 @@ func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (stri
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			c.logger.Printf("failed to close response body: %v", err)
+		}
+	}()
 
 	switch {
 	case response.StatusCode == http.StatusOK:

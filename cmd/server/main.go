@@ -70,7 +70,11 @@ func run(logger *log.Logger) error {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			logger.Printf("failed to close redis connection: %v", err)
+		}
+	}()
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return err
@@ -78,7 +82,7 @@ func run(logger *log.Logger) error {
 
 	subscriptionStore := store.NewPostgresSubscriptionStore(db)
 	githubCache := githubapi.NewRedisCache(redisClient)
-	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache, serviceMetrics)
+	githubClient := githubapi.NewClient(cfg.GitHubToken, githubCache, serviceMetrics, logger)
 	smtpMailer := mailer.NewSMTPMailer(cfg.SMTP)
 	subscriptionService := service.NewSubscriptionService(subscriptionStore, githubClient, smtpMailer, cfg.AppBaseURL)
 	scanner := service.NewScanner(subscriptionStore, githubClient, smtpMailer, logger, cfg.AppBaseURL, serviceMetrics)
