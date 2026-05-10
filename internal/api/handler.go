@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 
@@ -185,25 +184,12 @@ func toUISubscriptionResponse(subscription model.Subscription) uiSubscriptionRes
 }
 
 func writeServiceError(w http.ResponseWriter, err error) {
-	status := http.StatusInternalServerError
-	message := "internal server error"
-
-	switch {
-	case errors.Is(err, apperr.ErrInvalidEmail), errors.Is(err, apperr.ErrInvalidRepoFormat), errors.Is(err, apperr.ErrInvalidToken):
-		status = http.StatusBadRequest
-		message = err.Error()
-	case errors.Is(err, apperr.ErrRepoNotFound), errors.Is(err, apperr.ErrTokenNotFound):
-		status = http.StatusNotFound
-		message = err.Error()
-	case errors.Is(err, apperr.ErrAlreadySubscribed):
-		status = http.StatusConflict
-		message = err.Error()
-	case errors.Is(err, apperr.ErrRateLimited):
-		status = http.StatusServiceUnavailable
-		message = "github api rate limit reached"
+	if appErr, ok := err.(apperr.AppError); ok {
+		writeJSON(w, appErr.HTTPStatus(), messageResponse{Message: appErr.Error()})
+		return
 	}
 
-	writeJSON(w, status, messageResponse{Message: message})
+	writeJSON(w, http.StatusInternalServerError, messageResponse{Message: "internal server error"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

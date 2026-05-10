@@ -2,7 +2,6 @@ package grpcapi
 
 import (
 	"context"
-	"errors"
 
 	releasev1 "releasesapi/gen/releasev1"
 	"releasesapi/internal/apperr"
@@ -74,16 +73,8 @@ func (s *Server) GetSubscriptions(ctx context.Context, request *releasev1.GetSub
 }
 
 func toStatusError(err error) error {
-	switch {
-	case errors.Is(err, apperr.ErrInvalidEmail), errors.Is(err, apperr.ErrInvalidRepoFormat), errors.Is(err, apperr.ErrInvalidToken):
-		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, apperr.ErrRepoNotFound), errors.Is(err, apperr.ErrTokenNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, apperr.ErrAlreadySubscribed):
-		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, apperr.ErrRateLimited):
-		return status.Error(codes.Unavailable, "github api rate limit reached")
-	default:
-		return status.Error(codes.Internal, "internal server error")
+	if appErr, ok := err.(apperr.AppError); ok {
+		return status.Error(appErr.GRPCStatus(), appErr.Error())
 	}
+	return status.Error(codes.Internal, "internal server error")
 }
