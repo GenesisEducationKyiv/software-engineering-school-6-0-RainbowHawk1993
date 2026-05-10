@@ -104,7 +104,7 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 		}
 
 		for _, subscription := range group {
-			if subscription.LastSeenTag == tag {
+			if !subscription.NeedsNotification(tag) {
 				continue
 			}
 
