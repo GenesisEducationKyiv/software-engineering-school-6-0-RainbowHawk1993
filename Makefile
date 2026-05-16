@@ -1,4 +1,4 @@
-.PHONY: help test integration-test integration-test-clean integration-test-debug build run clean
+.PHONY: help test integration-test integration-test-clean integration-test-debug e2e-test e2e-test-clean e2e-test-debug build run clean
 
 help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -24,6 +24,15 @@ integration-test-debug: ## Run integration tests but keep containers for debuggi
 integration-test-local: ## Run integration tests locally (requires PostgreSQL and Redis)
 	go test -tags=integration -v ./internal/api -run Integration
 
+e2e-test: ## Run e2e tests using Playwright and Docker Compose
+	./run-e2e-tests.sh
+
+e2e-test-clean: ## Run e2e tests with clean state (remove containers/volumes first)
+	./run-e2e-tests.sh --clean
+
+e2e-test-debug: ## Run e2e tests but keep containers for debugging
+	./run-e2e-tests.sh --no-cleanup
+
 build: ## Build the application Docker image
 	docker build --target runtime -t releases-api:latest .
 
@@ -45,12 +54,16 @@ stop: ## Stop the application
 clean: ## Clean up Docker resources
 	docker compose down -v
 	docker compose -f docker-compose.integration.yml down -v
+	docker compose -f docker-compose.e2e.yml down -v
 
 logs: ## Show application logs
 	docker compose logs -f
 
 logs-integration: ## Show integration test logs
 	docker-compose -f docker-compose.integration.yml logs -f
+
+logs-e2e: ## Show e2e test logs
+	docker-compose -f docker-compose.e2e.yml logs -f
 
 db-shell: ## Connect to the database shell (requires app running)
 	docker compose exec db psql -U postgres -d releases

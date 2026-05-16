@@ -1,0 +1,13 @@
+{
+  "name": "releasesapi-e2e",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Releases API",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "typescript": "^5.0.0"
+  }
+}
