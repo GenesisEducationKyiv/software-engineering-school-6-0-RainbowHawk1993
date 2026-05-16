@@ -18,3 +18,7 @@ type Subscription struct {
 func (s Subscription) Repo() string {
 	return s.RepoOwner + "/" + s.RepoName
 }
+
+func (s Subscription) NeedsNotification(newTag string) bool {
+	return s.LastSeenTag != newTag
+}

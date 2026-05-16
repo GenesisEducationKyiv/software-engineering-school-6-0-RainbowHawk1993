@@ -113,7 +113,8 @@ func TestSubscribeSuccess(t *testing.T) {
 	store := &fakeStore{}
 	github := &fakeGitHub{latestTag: "v1.2.3"}
 	mailer := &fakeMailer{}
-	service := NewSubscriptionService(store, github, mailer, "http://localhost:8080")
+	builder := &fakeBuilder{}
+	service := NewSubscriptionService(store, github, mailer, builder, "http://localhost:8080")
 
 	subscription, err := service.Subscribe(context.Background(), "User@Example.com", "Owner/Repo")
 	if err != nil {
@@ -146,7 +147,8 @@ func TestSubscribeRollbackOnMailerFailure(t *testing.T) {
 	store := &fakeStore{}
 	github := &fakeGitHub{}
 	mailer := &fakeMailer{err: errors.New("smtp down")}
-	service := NewSubscriptionService(store, github, mailer, "http://localhost:8080")
+	builder := &fakeBuilder{}
+	service := NewSubscriptionService(store, github, mailer, builder, "http://localhost:8080")
 
 	if _, err := service.Subscribe(context.Background(), "user@example.com", "owner/repo"); err == nil {
 		t.Fatal("expected mailer error")
@@ -163,6 +165,7 @@ func TestSubscribeDuplicate(t *testing.T) {
 		&fakeStore{createErr: apperr.ErrAlreadySubscribed},
 		&fakeGitHub{},
 		&fakeMailer{},
+		&fakeBuilder{},
 		"http://localhost:8080",
 	)
 
@@ -175,7 +178,7 @@ func TestSubscribeDuplicate(t *testing.T) {
 func TestConfirmRejectsInvalidToken(t *testing.T) {
 	t.Parallel()
 
-	service := NewSubscriptionService(&fakeStore{}, &fakeGitHub{}, &fakeMailer{}, "http://localhost:8080")
+	service := NewSubscriptionService(&fakeStore{}, &fakeGitHub{}, &fakeMailer{}, &fakeBuilder{}, "http://localhost:8080")
 	_, err := service.Confirm(context.Background(), "bad-token")
 	if !errors.Is(err, apperr.ErrInvalidToken) {
 		t.Fatalf("expected invalid token error, got %v", err)
@@ -185,7 +188,7 @@ func TestConfirmRejectsInvalidToken(t *testing.T) {
 func TestListByEmailRejectsInvalidEmail(t *testing.T) {
 	t.Parallel()
 
-	service := NewSubscriptionService(&fakeStore{}, &fakeGitHub{}, &fakeMailer{}, "http://localhost:8080")
+	service := NewSubscriptionService(&fakeStore{}, &fakeGitHub{}, &fakeMailer{}, &fakeBuilder{}, "http://localhost:8080")
 	if _, err := service.ListByEmail(context.Background(), "not-an-email"); !errors.Is(err, apperr.ErrInvalidEmail) {
 		t.Fatalf("expected invalid email error, got %v", err)
 	}

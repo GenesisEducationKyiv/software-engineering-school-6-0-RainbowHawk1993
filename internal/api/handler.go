@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 
@@ -56,29 +55,44 @@ func NewHandler(subscriptions SubscriptionUseCase) *Handler {
 
 func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler, apiKey string) http.Handler {
 	router := chi.NewRouter()
+
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 	router.Use(middleware.Recoverer)
 	router.Use(metricsMiddleware(metrics))
-	router.Get("/", handler.Home)
-	router.With(apiKeyMiddleware(apiKey)).Get("/ui/subscriptions", handler.ListUISubscriptions)
-	if metricsHandler != nil {
-		router.With(apiKeyMiddleware(apiKey)).Handle("/metrics", metricsHandler)
-	}
 
-	router.Route("/api", func(r chi.Router) {
-		r.Use(apiKeyMiddleware(apiKey))
-		r.Post("/subscribe", handler.Subscribe)
-		r.Get("/confirm/{token}", handler.Confirm)
-		r.Get("/unsubscribe/{token}", handler.Unsubscribe)
-		r.Get("/subscriptions", handler.ListSubscriptions)
-	})
+	registerUIRoutes(router, handler, apiKey)
+	registerAPIRoutes(router, handler, apiKey)
+	registerMetricsRoutes(router, metricsHandler, apiKey)
 
 	if logger != nil {
 		logger.Printf("api router configured")
 	}
 
 	return router
+}
+
+// These route definitions can be moved to separate files in order to follow DDD? (e.g. routes_ui.go, routes_api.go, routes_metrics.go)
+func registerUIRoutes(r chi.Router, h *Handler, apiKey string) {
+	r.Get("/", h.Home)
+	// UI routes might eventually be separate, but for now they live here
+	r.With(apiKeyMiddleware(apiKey)).Get("/ui/subscriptions", h.ListUISubscriptions)
+}
+
+func registerAPIRoutes(r chi.Router, h *Handler, apiKey string) {
+	r.Route("/api", func(r chi.Router) {
+		r.Use(apiKeyMiddleware(apiKey))
+		r.Post("/subscribe", h.Subscribe)
+		r.Get("/confirm/{token}", h.Confirm)
+		r.Get("/unsubscribe/{token}", h.Unsubscribe)
+		r.Get("/subscriptions", h.ListSubscriptions)
+	})
+}
+
+func registerMetricsRoutes(r chi.Router, h http.Handler, apiKey string) {
+	if h != nil {
+		r.With(apiKeyMiddleware(apiKey)).Handle("/metrics", h)
+	}
 }
 
 func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
@@ -170,25 +184,12 @@ func toUISubscriptionResponse(subscription model.Subscription) uiSubscriptionRes
 }
 
 func writeServiceError(w http.ResponseWriter, err error) {
-	status := http.StatusInternalServerError
-	message := "internal server error"
-
-	switch {
-	case errors.Is(err, apperr.ErrInvalidEmail), errors.Is(err, apperr.ErrInvalidRepoFormat), errors.Is(err, apperr.ErrInvalidToken):
-		status = http.StatusBadRequest
-		message = err.Error()
-	case errors.Is(err, apperr.ErrRepoNotFound), errors.Is(err, apperr.ErrTokenNotFound):
-		status = http.StatusNotFound
-		message = err.Error()
-	case errors.Is(err, apperr.ErrAlreadySubscribed):
-		status = http.StatusConflict
-		message = err.Error()
-	case errors.Is(err, apperr.ErrRateLimited):
-		status = http.StatusServiceUnavailable
-		message = "github api rate limit reached"
+	if appErr, ok := err.(apperr.AppError); ok {
+		writeJSON(w, appErr.HTTPStatus(), messageResponse{Message: appErr.Error()})
+		return
 	}
 
-	writeJSON(w, status, messageResponse{Message: message})
+	writeJSON(w, http.StatusInternalServerError, messageResponse{Message: "internal server error"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
