@@ -9,6 +9,11 @@ FROM base AS test
 RUN go test ./...
 CMD ["go", "test", "./..."]
 
+FROM base AS integration-tests
+# Don't test during build - docker-compose will run tests at runtime
+# when database and redis are available
+CMD ["go", "test", "-tags=integration", "-v", "./internal/api"]
+
 FROM base AS build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/releases-api ./cmd/server
 
