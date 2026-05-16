@@ -25,7 +25,7 @@ docker run --rm releases-api-test
 Integration tests verify the interaction between the application code and external dependencies (PostgreSQL and Redis). They use `httptest.NewServer` and mocked external services (GitHub, Mailer) to ensure deterministic results.
 
 ### Running Integration Tests
-Integration tests require a running database and Redis. The project provides a script and a Docker Compose file to manage this automatically.
+Integration tests require a running database and Redis. The project provides a script and a Docker Compose file to manage this automatically. They are located in `tests/integration`.
 
 ```bash
 # Run tests and clean up afterwards
@@ -35,7 +35,7 @@ make integration-test-clean
 make integration-test-debug
 ```
 
-Under the hood, this uses `docker-compose.integration.yml` and `run-integration-tests.sh`.
+Under the hood, this uses `docker-compose.integration.yml` and `run-integration-tests.sh`, which execute tests in `tests/integration`.
 
 ---
 

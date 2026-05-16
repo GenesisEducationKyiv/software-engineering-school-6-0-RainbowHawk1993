@@ -11,7 +11,7 @@ services:
     environment:
       TEST_DATABASE_URL: "postgres://postgres:postgres@db:5432/releases?sslmode=disable"
       TEST_REDIS_ADDR: "redis:6379"
-    command: go test -tags=integration -v ./internal/api
+    command: go test -tags=integration -v ./tests/integration
     networks:
       - test-network
 

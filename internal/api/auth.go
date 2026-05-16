@@ -19,7 +19,7 @@ func apiKeyMiddleware(expectedKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !validAPIKey(r.Header.Get(apiKeyHeader), trimmedKey) {
-				writeJSON(w, http.StatusUnauthorized, messageResponse{Message: "missing or invalid api key"})
+				writeJSON(w, http.StatusUnauthorized, MessageResponse{Message: "missing or invalid api key"})
 				return
 			}
 

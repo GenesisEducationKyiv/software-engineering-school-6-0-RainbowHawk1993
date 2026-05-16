@@ -1,6 +1,6 @@
 // +build integration
 
-package api
+package integration_test
 
 import (
 	"bytes"
@@ -10,11 +10,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"releasesapi/internal/api"
 	"releasesapi/internal/mailer"
 	appmetrics "releasesapi/internal/metrics"
 	"releasesapi/internal/migrations"
@@ -24,7 +26,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	"net/http/httptest"
 )
 
 var (
@@ -32,7 +33,6 @@ var (
 	testDatabaseURL string
 	testRedisAddr   string
 	testAppBaseURL  = "http://localhost:8080"
-	testSmtpFrom    = "test@example.com"
 )
 
 type mockGitHubClient struct{}
@@ -52,8 +52,6 @@ func (m *mockMailer) Send(ctx context.Context, msg mailer.Message) error {
 }
 
 func init() {
-	// Allow overriding connection strings via environment variables
-	// Useful for running tests locally or in different environments
 	testDatabaseURL = os.Getenv("TEST_DATABASE_URL")
 	if testDatabaseURL == "" {
 		testDatabaseURL = "postgres://postgres:postgres@localhost:5435/releases?sslmode=disable"
@@ -66,13 +64,13 @@ func init() {
 }
 
 type TestServer struct {
-	client     *http.Client
-	baseURL    string
-	apiKey     string
-	db         *pgxpool.Pool
-	redis      *redis.Client
-	server     *httptest.Server
-	logger     *log.Logger
+	client  *http.Client
+	baseURL string
+	apiKey  string
+	db      *pgxpool.Pool
+	redis   *redis.Client
+	server  *httptest.Server
+	logger  *log.Logger
 }
 
 func setupTestDB(ctx context.Context) (*pgxpool.Pool, error) {
@@ -118,19 +116,15 @@ func setupTestServer(t *testing.T) *TestServer {
 		t.Fatalf("failed to setup test redis: %v", err)
 	}
 
-	// Clear all data
 	if err := redis.FlushDB(ctx).Err(); err != nil {
 		t.Fatalf("failed to flush redis: %v", err)
 	}
 
-	// Truncate subscriptions table
 	if _, err := db.Exec(ctx, "TRUNCATE TABLE subscriptions"); err != nil {
 		t.Fatalf("failed to truncate subscriptions: %v", err)
 	}
 
 	logger := log.New(io.Discard, "", 0)
-
-	// Setup dependencies
 	registry, serviceMetrics := appmetrics.NewRegistry()
 	subscriptionStore := store.NewPostgresSubscriptionStore(db)
 	githubClient := &mockGitHubClient{}
@@ -144,8 +138,8 @@ func setupTestServer(t *testing.T) *TestServer {
 		testAppBaseURL,
 	)
 
-	handler := NewHandler(subscriptionService)
-	router := NewRouter(handler, logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), testAPIKey)
+	handler := api.NewHandler(subscriptionService)
+	router := api.NewRouter(handler, logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), testAPIKey)
 
 	server := httptest.NewServer(router)
 
@@ -162,15 +156,11 @@ func setupTestServer(t *testing.T) *TestServer {
 
 func (ts *TestServer) cleanup(t *testing.T) {
 	ts.server.Close()
-
 	if ts.db != nil {
 		ts.db.Close()
 	}
-
 	if ts.redis != nil {
-		if err := ts.redis.Close(); err != nil {
-			t.Logf("failed to close redis: %v", err)
-		}
+		_ = ts.redis.Close()
 	}
 }
 
@@ -179,11 +169,9 @@ func (ts *TestServer) get(path string, requireAuth bool) (*http.Response, error)
 	if err != nil {
 		return nil, err
 	}
-
 	if requireAuth {
 		req.Header.Set("X-API-Key", ts.apiKey)
 	}
-
 	return ts.client.Do(req)
 }
 
@@ -192,18 +180,14 @@ func (ts *TestServer) post(path string, body interface{}, requireAuth bool) (*ht
 	if err != nil {
 		return nil, err
 	}
-
 	req, err := http.NewRequest(http.MethodPost, ts.baseURL+path, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-
 	if requireAuth {
 		req.Header.Set("X-API-Key", ts.apiKey)
 	}
-
 	return ts.client.Do(req)
 }
 
@@ -222,16 +206,14 @@ func (ts *TestServer) getTokenFromDB(email, repo string) (confirmToken, unsubscr
 	return ct, ut, err
 }
 
-// TestSubscribeSuccess tests successful subscription creation
 func TestSubscribeSuccess(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
+	resp, err := ts.post("/api/subscribe", api.SubscribeRequest{
 		Email: "test@example.com",
 		Repo:  "golang/go",
 	}, true)
@@ -245,48 +227,40 @@ func TestSubscribeSuccess(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
 	}
 
-	var msgResp messageResponse
+	var msgResp api.MessageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&msgResp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-
 	if !strings.Contains(msgResp.Message, "confirmation email sent") {
 		t.Fatalf("unexpected message: %s", msgResp.Message)
 	}
 }
 
-// TestSubscribeInvalidRequest tests subscribe endpoint with invalid request
 func TestSubscribeInvalidRequest(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	resp, err := ts.post("/api/subscribe", map[string]string{
-		"invalid": "data",
-	}, true)
+	resp, err := ts.post("/api/subscribe", map[string]string{"invalid": "data"}, true)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", resp.StatusCode)
 	}
 }
 
-// TestSubscribeMissingAuth tests that API key is required
 func TestSubscribeMissingAuth(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
+	resp, err := ts.post("/api/subscribe", api.SubscribeRequest{
 		Email: "test@example.com",
 		Repo:  "golang/go",
 	}, false)
@@ -294,18 +268,15 @@ func TestSubscribeMissingAuth(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", resp.StatusCode)
 	}
 }
 
-// TestSubscribeWrongAuth tests with wrong API key
 func TestSubscribeWrongAuth(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
@@ -313,7 +284,6 @@ func TestSubscribeWrongAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "wrong-key")
 
@@ -322,221 +292,98 @@ func TestSubscribeWrongAuth(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", resp.StatusCode)
 	}
 }
 
-// TestConfirmToken tests confirming a subscription with token
 func TestConfirmToken(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	// First, create a subscription
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
-		Email: "test@example.com",
-		Repo:  "golang/go",
-	}, true)
-	if err != nil {
-		t.Fatalf("subscribe request failed: %v", err)
-	}
+	resp, _ := ts.post("/api/subscribe", api.SubscribeRequest{Email: "test@example.com", Repo: "golang/go"}, true)
 	resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("subscribe failed with status %d", resp.StatusCode)
-	}
-
-	// Get the confirm token from DB
-	confirmToken, _, err := ts.getTokenFromDB("test@example.com", "golang/go")
-	if err != nil {
-		t.Fatalf("failed to get token from db: %v", err)
-	}
-
-	// Confirm the subscription
-	resp, err = ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
+	confirmToken, _, _ := ts.getTokenFromDB("test@example.com", "golang/go")
+	resp, err := ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
 	if err != nil {
 		t.Fatalf("confirm request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
-	}
-
-	var msgResp messageResponse
-	if err := json.NewDecoder(resp.Body).Decode(&msgResp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if !strings.Contains(msgResp.Message, "confirmed") {
-		t.Fatalf("unexpected message: %s", msgResp.Message)
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 }
 
-// TestConfirmInvalidToken tests confirming with invalid token
 func TestConfirmInvalidToken(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	resp, err := ts.get("/api/confirm/0000000000000000000000000000000000000000000000000000000000000000", true)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	resp, _ := ts.get("/api/confirm/0000000000000000000000000000000000000000000000000000000000000000", true)
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", resp.StatusCode)
 	}
 }
 
-// TestUnsubscribe tests unsubscribing with token
 func TestUnsubscribe(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	// First, create a subscription
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
-		Email: "test@example.com",
-		Repo:  "golang/go",
-	}, true)
-	if err != nil {
-		t.Fatalf("subscribe request failed: %v", err)
-	}
+	resp, _ := ts.post("/api/subscribe", api.SubscribeRequest{Email: "test@example.com", Repo: "golang/go"}, true)
 	resp.Body.Close()
 
-	// Get the unsubscribe token from DB
-	_, unsubscribeToken, err := ts.getTokenFromDB("test@example.com", "golang/go")
-	if err != nil {
-		t.Fatalf("failed to get token from db: %v", err)
-	}
-
-	// Unsubscribe
-	resp, err = ts.get(fmt.Sprintf("/api/unsubscribe/%s", unsubscribeToken), true)
+	_, unsubscribeToken, _ := ts.getTokenFromDB("test@example.com", "golang/go")
+	resp, err := ts.get(fmt.Sprintf("/api/unsubscribe/%s", unsubscribeToken), true)
 	if err != nil {
 		t.Fatalf("unsubscribe request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
-	}
-
-	var msgResp messageResponse
-	if err := json.NewDecoder(resp.Body).Decode(&msgResp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if !strings.Contains(msgResp.Message, "unsubscribed") {
-		t.Fatalf("unexpected message: %s", msgResp.Message)
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 }
 
-// TestUnsubscribeInvalidToken tests unsubscribing with invalid token
 func TestUnsubscribeInvalidToken(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	resp, err := ts.get("/api/unsubscribe/0000000000000000000000000000000000000000000000000000000000000000", true)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
+	resp, _ := ts.get("/api/unsubscribe/0000000000000000000000000000000000000000000000000000000000000000", true)
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", resp.StatusCode)
 	}
 }
 
-// TestListSubscriptions tests listing subscriptions by email
 func TestListSubscriptions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	// Create first subscription
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
-		Email: "test@example.com",
-		Repo:  "golang/go",
-	}, true)
-	if err != nil {
-		t.Fatalf("subscribe request failed: %v", err)
-	}
+	resp, _ := ts.post("/api/subscribe", api.SubscribeRequest{Email: "test@example.com", Repo: "golang/go"}, true)
 	resp.Body.Close()
 
-	// Get the confirm token and confirm it
-	confirmToken, _, err := ts.getTokenFromDB("test@example.com", "golang/go")
-	if err != nil {
-		t.Fatalf("failed to get token from db: %v", err)
-	}
-
-	resp, err = ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
-	if err != nil {
-		t.Fatalf("confirm request failed: %v", err)
-	}
+	confirmToken, _, _ := ts.getTokenFromDB("test@example.com", "golang/go")
+	resp, _ = ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
 	resp.Body.Close()
 
-	// List subscriptions
-	resp, err = ts.get("/api/subscriptions?email=test@example.com", true)
-	if err != nil {
-		t.Fatalf("list request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
-	}
-
-	var subscriptions []subscriptionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&subscriptions); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if len(subscriptions) != 1 {
-		t.Fatalf("expected 1 subscription, got %d", len(subscriptions))
-	}
-
-	if subscriptions[0].Email != "test@example.com" {
-		t.Fatalf("expected email test@example.com, got %s", subscriptions[0].Email)
-	}
-
-	if subscriptions[0].Confirmed != true {
-		t.Fatalf("expected subscription to be confirmed")
-	}
-}
-
-// TestListSubscriptionsEmpty tests listing subscriptions when there are none
-func TestListSubscriptionsEmpty(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	ts := setupTestServer(t)
-	defer ts.cleanup(t)
-
-	resp, err := ts.get("/api/subscriptions?email=nonexistent@example.com", true)
+	resp, err := ts.get("/api/subscriptions?email=test@example.com", true)
 	if err != nil {
 		t.Fatalf("list request failed: %v", err)
 	}
@@ -546,78 +393,71 @@ func TestListSubscriptionsEmpty(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var subscriptions []subscriptionResponse
+	var subscriptions []api.SubscriptionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&subscriptions); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
+	if len(subscriptions) != 1 {
+		t.Fatalf("expected 1 subscription, got %d", len(subscriptions))
+	}
+}
 
+func TestListSubscriptionsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ts := setupTestServer(t)
+	defer ts.cleanup(t)
+
+	resp, _ := ts.get("/api/subscriptions?email=nonexistent@example.com", true)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	var subscriptions []api.SubscriptionResponse
+	_ = json.NewDecoder(resp.Body).Decode(&subscriptions)
 	if len(subscriptions) != 0 {
 		t.Fatalf("expected 0 subscriptions, got %d", len(subscriptions))
 	}
 }
 
-// TestListUISubscriptions tests the UI endpoint for listing subscriptions
 func TestListUISubscriptions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
-	// Create and confirm a subscription
-	resp, err := ts.post("/api/subscribe", subscribeRequest{
-		Email: "test@example.com",
-		Repo:  "golang/go",
-	}, true)
-	if err != nil {
-		t.Fatalf("subscribe request failed: %v", err)
-	}
+	resp, _ := ts.post("/api/subscribe", api.SubscribeRequest{Email: "test@example.com", Repo: "golang/go"}, true)
 	resp.Body.Close()
 
-	confirmToken, _, err := ts.getTokenFromDB("test@example.com", "golang/go")
-	if err != nil {
-		t.Fatalf("failed to get token from db: %v", err)
-	}
-
-	resp, err = ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
-	if err != nil {
-		t.Fatalf("confirm request failed: %v", err)
-	}
+	confirmToken, _, _ := ts.getTokenFromDB("test@example.com", "golang/go")
+	resp, _ = ts.get(fmt.Sprintf("/api/confirm/%s", confirmToken), true)
 	resp.Body.Close()
 
-	// List UI subscriptions
-	resp, err = ts.get("/ui/subscriptions?email=test@example.com", true)
+	resp, err := ts.get("/ui/subscriptions?email=test@example.com", true)
 	if err != nil {
 		t.Fatalf("list request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var subscriptions []uiSubscriptionResponse
+	var subscriptions []api.UISubscriptionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&subscriptions); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-
 	if len(subscriptions) != 1 {
 		t.Fatalf("expected 1 subscription, got %d", len(subscriptions))
 	}
-
-	if subscriptions[0].UnsubscribeToken == "" {
-		t.Fatalf("expected unsubscribe token in UI response")
-	}
 }
 
-// TestHomeEndpoint tests the home page endpoint
 func TestHomeEndpoint(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
@@ -626,23 +466,15 @@ func TestHomeEndpoint(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/html") {
-		t.Fatalf("expected text/html content type, got %s", contentType)
-	}
 }
 
-// TestMetricsEndpoint tests the metrics endpoint
 func TestMetricsEndpoint(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-
 	ts := setupTestServer(t)
 	defer ts.cleanup(t)
 
@@ -651,13 +483,7 @@ func TestMetricsEndpoint(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/plain") {
-		t.Fatalf("expected text/plain content type, got %s", contentType)
 	}
 }

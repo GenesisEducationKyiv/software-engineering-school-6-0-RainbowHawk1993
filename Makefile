@@ -22,7 +22,7 @@ integration-test-debug: ## Run integration tests but keep containers for debuggi
 	./run-integration-tests.sh --no-cleanup
 
 integration-test-local: ## Run integration tests locally (requires PostgreSQL and Redis)
-	go test -tags=integration -v ./internal/api -run Integration
+	go test -tags=integration -v ./tests/integration -run Integration
 
 e2e-test: ## Run e2e tests using Playwright and Docker Compose
 	./run-e2e-tests.sh
