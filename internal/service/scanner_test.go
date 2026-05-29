@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"testing"
 
 	"releasesapi/internal/mailer"
@@ -39,7 +39,9 @@ func TestScannerRunOnceSendsNotificationsForNewTags(t *testing.T) {
 	mailer := &fakeMailer{}
 	builder := &fakeBuilder{}
 
-	scanner := NewScanner(store, github, mailer, builder, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
+	discardLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	scanner := NewScanner(store, github, mailer, builder, discardLogger, "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
@@ -65,7 +67,9 @@ func TestScannerSkipsStateUpdateOnMailerFailure(t *testing.T) {
 	mailer := &fakeMailer{err: errors.New("smtp down")}
 	builder := &fakeBuilder{}
 
-	scanner := NewScanner(store, github, mailer, builder, log.New(io.Discard, "", 0), "http://localhost:8080", nil)
+	discardLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	scanner := NewScanner(store, github, mailer, builder, discardLogger, "http://localhost:8080", nil)
 
 	if err := scanner.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
