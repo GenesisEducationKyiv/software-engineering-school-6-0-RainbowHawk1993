@@ -102,7 +102,7 @@ grpcurl -plaintext \
 - `last_seen_tag` is seeded from the current latest release during subscription creation so existing releases do not trigger an immediate notification.
 - Confirmed subscriptions only are scanned for release notifications.
 - GitHub repo existence and latest-release responses are cached in Redis for 10 minutes.
-- Prometheus metrics are exposed at `/metrics` with HTTP, GitHub, scanner, and notification counters.
+- Prometheus metrics are exposed at `/metrics` with HTTP, GitHub, scanner, and notification counters. A local Prometheus instance is available at `http://localhost:9091` and Grafana with a RED dashboard is at `http://localhost:3000` (Login: `admin/admin`).
 - Protected endpoints use API key auth; the default local key is `dev-api-key` unless overridden with `API_KEY`.
 
 ## Testing
