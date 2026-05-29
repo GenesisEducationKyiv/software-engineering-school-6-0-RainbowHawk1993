@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -23,10 +23,10 @@ type Client struct {
 	cache      Cache
 	metrics    *appmetrics.ServiceMetrics
 	httpClient *http.Client
-	logger     *log.Logger
+	logger     *slog.Logger
 }
 
-func NewClient(token string, cache Cache, metrics *appmetrics.ServiceMetrics, logger *log.Logger) *Client {
+func NewClient(token string, cache Cache, metrics *appmetrics.ServiceMetrics, logger *slog.Logger) *Client {
 	return &Client{
 		baseURL: baseURL,
 		token:   strings.TrimSpace(token),
@@ -62,7 +62,7 @@ func (c *Client) RepoExists(ctx context.Context, owner, repo string) error {
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			c.logger.Printf("failed to close response body: %v", err)
+			c.logger.Error("failed to close response body", "error", err)
 		}
 	}()
 
@@ -107,7 +107,7 @@ func (c *Client) LatestReleaseTag(ctx context.Context, owner, repo string) (stri
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			c.logger.Printf("failed to close response body: %v", err)
+			c.logger.Error("failed to close response body", "error", err)
 		}
 	}()
 

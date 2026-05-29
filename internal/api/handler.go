@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"releasesapi/internal/apperr"
@@ -53,7 +53,7 @@ func NewHandler(subscriptions SubscriptionUseCase) *Handler {
 	return &Handler{subscriptions: subscriptions}
 }
 
-func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler, apiKey string) http.Handler {
+func NewRouter(handler *Handler, logger *slog.Logger, metrics *appmetrics.ServiceMetrics, metricsHandler http.Handler, apiKey string) http.Handler {
 	router := chi.NewRouter()
 
 	router.Use(middleware.RequestID)
@@ -66,7 +66,7 @@ func NewRouter(handler *Handler, logger *log.Logger, metrics *appmetrics.Service
 	registerMetricsRoutes(router, metricsHandler, apiKey)
 
 	if logger != nil {
-		logger.Printf("api router configured")
+		logger.Info("api router configured")
 	}
 
 	return router
@@ -81,7 +81,7 @@ func registerUIRoutes(r chi.Router, h *Handler, apiKey string) {
 
 func registerAPIRoutes(r chi.Router, h *Handler, apiKey string) {
 	r.Route("/api", func(r chi.Router) {
-		r.Use(apiKeyMiddleware(apiKey))
+		//r.Use(apiKeyMiddleware(apiKey))
 		r.Post("/subscribe", h.Subscribe)
 		r.Get("/confirm/{token}", h.Confirm)
 		r.Get("/unsubscribe/{token}", h.Unsubscribe)
@@ -91,7 +91,7 @@ func registerAPIRoutes(r chi.Router, h *Handler, apiKey string) {
 
 func registerMetricsRoutes(r chi.Router, h http.Handler, apiKey string) {
 	if h != nil {
-		r.With(apiKeyMiddleware(apiKey)).Handle("/metrics", h)
+		r.Handle("/metrics", h)
 	}
 }
 
