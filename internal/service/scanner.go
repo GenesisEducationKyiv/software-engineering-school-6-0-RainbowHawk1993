@@ -144,4 +144,3 @@ func (s *Scanner) observeScannerRun(outcome string) {
 func isScannerSoftError(err error) bool {
 	return err == nil || err == context.Canceled
 }
-
