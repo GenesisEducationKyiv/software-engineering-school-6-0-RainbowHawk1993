@@ -3,7 +3,6 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go mod download
 
 FROM base AS test
 RUN go test ./...

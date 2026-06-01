@@ -1,3 +1,5 @@
+name: releases-integration
+
 services:
   integration-tests:
     build:

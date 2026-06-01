@@ -13,25 +13,29 @@ test-coverage: ## Run unit tests with coverage
 	go test -cover ./...
 
 integration-test: ## Run integration tests using Docker Compose
-	./run-integration-tests.sh
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans --abort-on-container-exit --exit-code-from integration-tests
 
 integration-test-clean: ## Run integration tests with clean state (remove containers/volumes first)
-	./run-integration-tests.sh --clean
+	docker compose -f docker-compose.integration.yml down -v --remove-orphans
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans --abort-on-container-exit --exit-code-from integration-tests
 
 integration-test-debug: ## Run integration tests but keep containers for debugging
-	./run-integration-tests.sh --no-cleanup
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans -d db redis
+	docker compose -f docker-compose.integration.yml run --rm integration-tests
 
 integration-test-local: ## Run integration tests locally (requires PostgreSQL and Redis)
-	go test -tags=integration -v ./tests/integration -run Integration
+	go test -tags=integration -v ./tests/integration
 
-e2e-test: ## Run e2e tests using Playwright and Docker Compose
-	./run-e2e-tests.sh
+e2e-test: ## Run e2e tests using Docker Compose
+	docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e-tests
 
 e2e-test-clean: ## Run e2e tests with clean state (remove containers/volumes first)
-	./run-e2e-tests.sh --clean
+	docker compose -f docker-compose.e2e.yml down -v
+	docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e-tests
 
 e2e-test-debug: ## Run e2e tests but keep containers for debugging
-	./run-e2e-tests.sh --no-cleanup
+	docker compose -f docker-compose.e2e.yml up --build -d app db redis mailpit
+	docker compose -f docker-compose.e2e.yml run --rm e2e-tests
 
 build: ## Build the application Docker image
 	docker build --target runtime -t releases-api:latest .
@@ -52,9 +56,9 @@ stop: ## Stop the application
 	docker compose down
 
 clean: ## Clean up Docker resources
-	docker compose down -v
-	docker compose -f docker-compose.integration.yml down -v
-	docker compose -f docker-compose.e2e.yml down -v
+	docker compose down -v --remove-orphans
+	docker compose -f docker-compose.integration.yml down -v --remove-orphans
+	docker compose -f docker-compose.e2e.yml down -v --remove-orphans
 
 logs: ## Show application logs
 	docker compose logs -f

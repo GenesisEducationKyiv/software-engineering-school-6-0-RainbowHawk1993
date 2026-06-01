@@ -1,8 +1,10 @@
+name: releases-e2e
+
 services:
   e2e-tests:
     build:
-      context: ./tests/e2e
-      dockerfile: Dockerfile.e2e
+      context: .
+      dockerfile: tests/e2e/Dockerfile.e2e
     depends_on:
       app:
         condition: service_healthy
@@ -46,6 +48,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    volumes:
+      - postgres_data_e2e:/var/lib/postgresql/data
     networks:
       - e2e-network
 
@@ -63,6 +67,9 @@ services:
     image: axllent/mailpit:v1.24
     networks:
       - e2e-network
+
+volumes:
+  postgres_data_e2e:
 
 networks:
   e2e-network:

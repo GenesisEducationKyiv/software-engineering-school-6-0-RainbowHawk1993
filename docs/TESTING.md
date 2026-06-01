@@ -25,7 +25,7 @@ docker run --rm releases-api-test
 Integration tests verify the interaction between the application code and external dependencies (PostgreSQL and Redis). They use `httptest.NewServer` and mocked external services (GitHub, Mailer) to ensure deterministic results.
 
 ### Running Integration Tests
-Integration tests require a running database and Redis. The project provides a script and a Docker Compose file to manage this automatically. They are located in `tests/integration`.
+Integration tests require a running database and Redis. The project provides Makefile targets that use Docker Compose to manage this automatically.
 
 ```bash
 # Run tests and clean up afterwards
@@ -35,7 +35,7 @@ make integration-test-clean
 make integration-test-debug
 ```
 
-Under the hood, this uses `docker-compose.integration.yml` and `run-integration-tests.sh`, which execute tests in `tests/integration`.
+Under the hood, this uses `docker-compose.integration.yml` to execute tests in `tests/integration`.
 
 ---
 
@@ -54,7 +54,8 @@ make e2e-test-clean
 make e2e-test-debug
 ```
 
-Under the hood, this uses `docker-compose.e2e.yml` and `run-e2e-tests.sh`.
+Under the hood, this uses `docker-compose.e2e.yml` to execute tests in `tests/e2e` using the Go Playwright bindings.
+
 
 ### Test Artifacts
 If an E2E test fails, Playwright generates screenshots and traces. To view these when running in debug mode, you can map the `test-results` volume or use the provided HTML reporter.

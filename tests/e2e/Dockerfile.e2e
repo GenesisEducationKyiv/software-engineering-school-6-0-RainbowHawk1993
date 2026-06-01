@@ -1,10 +1,12 @@
-FROM mcr.microsoft.com/playwright:v1.60.0
+FROM golang:1.24.0-bookworm
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY go.mod go.sum ./
+RUN go mod download
+
+RUN go run github.com/playwright-community/playwright-go/cmd/playwright@latest install --with-deps
 
 COPY . .
 
-CMD ["npx", "playwright", "test"]
+CMD ["go", "test", "-tags=e2e", "-v", "./tests/e2e/..."]
