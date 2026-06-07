@@ -1,15 +1,28 @@
 # GitHub Release Notification API
 
-Single-service Go API for email subscriptions to GitHub repository releases. The service validates repositories through the GitHub API, stores subscriptions in PostgreSQL, sends confirmation and release emails through SMTP, and scans for new releases on a fixed interval. (15 minutes by default)
+Modular Go application for email subscriptions to GitHub repository releases. The **API service** validates repositories, manages subscriptions in PostgreSQL, and exposes REST and gRPC. The **Scanner microservice** polls GitHub for new releases and sends notification emails.
 
 ## Stack
 
 - Go with `chi`
-- gRPC alongside REST
-- PostgreSQL
+- gRPC alongside REST (public + internal)
+- PostgreSQL (API service)
 - Redis for GitHub API caching
-- Docker / Docker Compose
+- Docker / Docker Compose (two services: `api` + `scanner`)
 - Mailpit for local SMTP capture
+
+## Architecture
+
+The codebase follows a domain-module layout:
+
+- `internal/modules/subscription` — subscription lifecycle
+- `internal/modules/scanner` — release polling and notifications
+- `internal/modules/github` — GitHub client + Redis cache
+- `internal/modules/notification` — email templates and SMTP
+- `cmd/api` — API service (REST, public gRPC, internal gRPC)
+- `cmd/scanner` — background scanner worker
+
+See [docs/architecture.md](docs/architecture.md) and [ADR 0004](docs/adr/0004-modular-architecture-and-scanner-microservice.md) for details.
 
 ## Run Locally
 
@@ -21,31 +34,32 @@ Services:
 
 - API: `http://localhost:8080`
 - Prometheus metrics: `http://localhost:8080/metrics`
-- gRPC: `localhost:9090`
+- Public gRPC: `localhost:9090`
+- Internal gRPC: `localhost:9091` (scanner ↔ API)
+- Scanner: background worker (no HTTP port)
 - Mailpit UI: `http://localhost:8025`
 - PostgreSQL: `localhost:5435`
 - Redis: internal service `redis:6379`
 
-The project serves a small HTML UI at `http://localhost:8080` for creating, viewing, and unsubscribing subscriptions in the browser.
-
-You will have to provide api key on webpage for requests to go through. By default it is set to `dev-api-key`.
+The HTML UI at `http://localhost:8080` lets you manage subscriptions in the browser. Default API key: `dev-api-key`.
 
 ## Environment
 
-Copy `.env.example` to `.env` if you need custom settings. Important variables:
+Copy `.env.example` to `.env` for custom settings.
+
+**API service:**
 
 - `DATABASE_URL`
-- `GRPC_PORT`
-- `API_KEY`
-- `APP_BASE_URL`
-- `GITHUB_TOKEN`
+- `PORT`, `GRPC_PORT`, `INTERNAL_GRPC_PORT`
+- `API_KEY`, `APP_BASE_URL`, `GITHUB_TOKEN`
+- `SMTP_*`, `REDIS_*`
+
+**Scanner service:**
+
+- `SUBSCRIPTION_API_GRPC_ADDR` (default `api:9091`)
 - `SCAN_INTERVAL`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_FROM`
-- `REDIS_ADDR`
-- `REDIS_PASSWORD`
-- `REDIS_DB`
+- `API_KEY`, `APP_BASE_URL`, `GITHUB_TOKEN`
+- `SMTP_*`, `REDIS_*`
 
 ## API
 
@@ -53,11 +67,11 @@ Copy `.env.example` to `.env` if you need custom settings. Important variables:
 - `GET /api/confirm/{token}`
 - `GET /api/unsubscribe/{token}`
 - `GET /api/subscriptions?email={email}`
-- `GET /ui/subscriptions?email={email}` returns browser-oriented subscription data used by the HTML UI, including unsubscribe tokens for each listed subscription.
+- `GET /ui/subscriptions?email={email}`
 
 All REST endpoints above require the `X-API-Key` header.
 
-Example subscription request:
+Example:
 
 ```bash
 curl -X POST http://localhost:8080/api/subscribe \
@@ -66,19 +80,9 @@ curl -X POST http://localhost:8080/api/subscribe \
   -d '{"email":"user@example.com","repo":"microsoft/vscode"}'
 ```
 
-Example see subscriptions request:
-
-```bash
-curl -H 'X-API-Key: dev-api-key' \
-  "http://localhost:8080/api/subscriptions?email=user@example.com"
-```
-
 ## gRPC
 
-The service also exposes gRPC with server reflection enabled on `localhost:9090`.
-All gRPC methods require metadata header `x-api-key`.
-
-Example with `grpcurl`:
+Public service on `localhost:9090` with server reflection. All methods require `x-api-key` metadata.
 
 ```bash
 grpcurl -plaintext \
@@ -87,27 +91,24 @@ grpcurl -plaintext \
   localhost:9090 releasesapi.v1.SubscriptionService/Subscribe
 ```
 
-List subscriptions with gRPC:
-
-```bash
-grpcurl -plaintext \
-  -H 'x-api-key: dev-api-key' \
-  -d '{"email":"user@example.com"}' \
-  localhost:9090 releasesapi.v1.SubscriptionService/GetSubscriptions
-```
-
 ## Development Notes
 
-- Database migrations run automatically on service startup.
-- `last_seen_tag` is seeded from the current latest release during subscription creation so existing releases do not trigger an immediate notification.
-- Confirmed subscriptions only are scanned for release notifications.
-- GitHub repo existence and latest-release responses are cached in Redis for 10 minutes.
-- Prometheus metrics are exposed at `/metrics` with HTTP, GitHub, scanner, and notification counters.
-- Protected endpoints use API key auth; the default local key is `dev-api-key` unless overridden with `API_KEY`.
+- Database migrations run on API startup only.
+- `last_seen_tag` is seeded from the current latest release at subscribe time.
+- Only confirmed subscriptions are scanned.
+- GitHub responses are cached in Redis for 10 minutes.
+- Scanner has no direct database access; it uses internal gRPC on the API service.
 
 ## Testing
 
 ```bash
-docker build --target test -t releases-api-test .
-docker run --rm releases-api-test
+make test
+make integration-test-clean
+make e2e-test-clean
+```
+
+Unit tests:
+
+```bash
+go test ./...
 ```

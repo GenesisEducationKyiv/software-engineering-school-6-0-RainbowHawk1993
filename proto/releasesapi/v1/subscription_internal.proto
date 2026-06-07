@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package releasesapi.v1;
+
+option go_package = "releasesapi/gen/internalv1;internalv1";
+
+service InternalSubscriptionService {
+  rpc ListConfirmedForScan(Empty) returns (ListConfirmedForScanResponse);
+  rpc UpdateLastSeenTag(UpdateLastSeenTagRequest) returns (Empty);
+}
+
+message Empty {}
+
+message UpdateLastSeenTagRequest {
+  int64 subscription_id = 1;
+  string tag = 2;
+}
+
+message InternalSubscription {
+  int64 id = 1;
+  string email = 2;
+  string repo_owner = 3;
+  string repo_name = 4;
+  bool confirmed = 5;
+  string confirm_token = 6;
+  string unsubscribe_token = 7;
+  string last_seen_tag = 8;
+}
+
+message ListConfirmedForScanResponse {
+  repeated InternalSubscription subscriptions = 1;
+}

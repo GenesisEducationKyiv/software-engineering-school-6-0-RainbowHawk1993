@@ -1,60 +1,75 @@
 # System Architecture
 
-**Date:** 2026-05-06
+**Date:** 2026-06-07
 
 ## Overview
-The GitHub Release Notification API is a Go-based service that tracks repository releases. It utilizes a layered architecture to separate transport (REST/gRPC) from business logic and data persistence.
+
+The GitHub Release Notification system is a modular Go application split into an **API service** and a **Scanner microservice**. The API handles subscription lifecycle and exposes REST and gRPC interfaces. The Scanner polls GitHub for new releases and notifies subscribers via email, communicating with the API through an internal gRPC contract.
 
 ## Assumptions
-- **Deployment Environment:** The service is intended to be run within a containerized environment (Docker/Docker Compose) with access to persistent volume storage for the database.
-- **GitHub API Usage:** It is assumed that the provided GITHUB_TOKEN has sufficient rate-limit quotas for the number of subscribed repositories and the chosen SCAN_INTERVAL.
-- **SMTP Availability:** The system assumes an SMTP server is reachable and configured correctly for the environment.
-- **Single-Tenant Scale:** The current design assumes a moderate load where a single background scanner instance is sufficient. If repository counts scale significantly, horizontal scaling of the scanner may require a distributed job queue (e.g., Temporal or RabbitMQ).
-- **Data Integrity:** It is assumed that the database is backed up externally; the application manages schema migrations automatically on startup but does not perform full database dumps.
-- **Identity:** The system relies on email addresses as the unique identifier for subscriptions; there is no formal user account management or password-protected authentication system beyond the API Key.
+
+- **Deployment Environment:** Containerized (Docker/Docker Compose) with persistent PostgreSQL storage.
+- **GitHub API Usage:** `GITHUB_TOKEN` has sufficient rate-limit quotas for subscribed repositories and scan interval.
+- **SMTP Availability:** SMTP server is reachable and configured for the environment.
+- **Single-Tenant Scale:** One scanner instance is sufficient for moderate load; multiple scanner replicas would require coordination (e.g., distributed job queue).
+- **Data Integrity:** Database is backed up externally; schema migrations run on API startup.
+- **Identity:** Email is the subscription identifier; API key protects all programmatic endpoints.
 
 ## Requirements
+
 ### Functional Requirements
-- **Subscription Management:** Users can subscribe to GitHub repository releases by providing an email and repository name (owner/repo).
-- **Confirmation Flow:** Subscriptions are created in a pending state and must be confirmed via a unique token sent via email.
-- **Unsubscription:** Users can stop receiving notifications using a secure token provided in the notification emails.
-- **Release Tracking:** The system performs periodic background scans to check for new releases in subscribed repositories.
-- **Email Notifications:** Users receive an automated email notification when a new tag is detected in a tracked repository.
-- **Queryability:** Users can list their active subscriptions via both REST API and gRPC.
+
+- **Subscription Management:** Subscribe, confirm, unsubscribe, list subscriptions.
+- **Confirmation Flow:** Pending subscriptions confirmed via email token.
+- **Release Tracking:** Scanner service checks for new GitHub releases on an interval.
+- **Email Notifications:** Confirmation and release emails via SMTP.
+- **Queryability:** REST and public gRPC for subscription queries.
 
 ### Non-Functional Requirements
-- **Reliability:** Background scanning must handle API failures and transient errors gracefully without crashing the service.
-- **Scalability (GitHub API):** The system must respect GitHub's rate limits by utilizing Redis-based caching for repository checks.
-- **Performance:**
-  - API response times should be minimal, with heavy operations (like release polling) offloaded to background workers.
-  - Database queries should be indexed for high-frequency lookup operations.
-- **Security:**
-  - All API endpoints must be protected by an X-API-Key to prevent unauthorized usage.
-  - Sensitive communication tokens (confirm/unsubscribe) must be randomly generated and sufficiently complex.
-- **Observability:** The system must expose Prometheus metrics to monitor HTTP performance, scanner health, and notification success/failure rates.
-- **Maintainability:** The codebase must follow Clean Architecture patterns to allow for swapping storage or notification backends with minimal impact to core logic.
+
+- **Reliability:** Scanner handles GitHub/SMTP failures without crashing.
+- **Scalability:** Redis caches GitHub responses to reduce rate-limit pressure.
+- **Security:** API key on REST, public gRPC, internal gRPC, and metrics.
+- **Observability:** Prometheus metrics on API; scanner exposes process metrics.
+- **Maintainability:** Domain modules with explicit boundaries (see ADR 0004).
+
+## Domain Boundaries
+
+| Domain | Owner | Responsibility |
+|--------|-------|----------------|
+| Subscription | API service | Lifecycle, PostgreSQL persistence |
+| Release Scanner | Scanner service | Polling, notification dispatch, `last_seen_tag` updates via gRPC |
+| GitHub Integration | Shared module | Repo validation, release tags, Redis cache |
+| Notification | Shared module | Email templates and SMTP |
+| Platform | Shared | Config, migrations, metrics, errors |
 
 ## Component Diagram
+
 ```mermaid
 graph TD
-    User[Client] -->|REST| HTTP[HTTP Handler]
-    User -->|gRPC| GRPC[gRPC Server]
+    Client[Client] -->|REST :8080| HTTP[HTTP Transport]
+    Client -->|gRPC :9090| PublicGRPC[Public gRPC]
 
-    subgraph "Application Layer"
-        HTTP & GRPC --> Svc[Subscription Service]
-        Svc -->|Manage| Store[(Postgres)]
-        Svc -->|Verify| GH[GitHub API Client]
-        GH -->|Cache| Redis[(Redis)]
+    subgraph apiSvc [API Service cmd/api]
+        HTTP & PublicGRPC --> SubApp[Subscription Application]
+        SubApp --> SubStore[(PostgreSQL)]
+        SubApp --> GHMod[GitHub Module]
+        SubApp --> NotifMod[Notification Module]
+        InternalGRPC[Internal gRPC :9091] --> SubStore
     end
 
-    subgraph "Background Worker"
-        Scanner[Scanner Service] -->|Poll| Store
-        Scanner -->|Fetch| GH
-        Scanner -->|Notify| SMTP[SMTP Mailer]
+    subgraph scannerSvc [Scanner Service cmd/scanner]
+        ScanApp[Scanner Application] -->|gRPC| InternalGRPC
+        ScanApp --> GHMod2[GitHub Module]
+        ScanApp --> NotifMod2[Notification Module]
     end
+
+    GHMod & GHMod2 --> Redis[(Redis)]
+    NotifMod & NotifMod2 --> SMTP[SMTP]
 ```
 
 ## Subscription Flow
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -62,16 +77,43 @@ sequenceDiagram
     participant Store
     participant Mailer
 
-    User->>API: POST /api/subscribe (email, repo)
+    User->>API: POST /api/subscribe
     API->>API: Validate input
-    API->>API: Verify repo existence (GitHub)
+    API->>API: Verify repo (GitHub)
     API->>Store: Create pending subscription
     API->>Mailer: Send confirmation email
     Mailer-->>User: Confirmation link
 ```
 
+## Scanner Flow
+
+```mermaid
+sequenceDiagram
+    participant Scanner
+    participant API as API Internal gRPC
+    participant GitHub
+    participant Mailer
+
+    Scanner->>API: ListConfirmedForScan
+    API-->>Scanner: subscriptions
+    Scanner->>GitHub: LatestReleaseTag
+    GitHub-->>Scanner: tag
+    alt new tag detected
+        Scanner->>Mailer: Send release email
+        Scanner->>API: UpdateLastSeenTag
+    end
+```
+
 ## Technology Choices
-- **Persistence:** PostgreSQL for durable storage of subscription state.
-- **Caching:** Redis to prevent GitHub API rate-limiting.
-- **Communication**: Dual-interface (REST for web UI, gRPC for programmatic access).
-- **Observability:** Prometheus metrics tracking HTTP performance and GitHub integration health.
+
+- **Persistence:** PostgreSQL (API service only)
+- **Caching:** Redis for GitHub API responses
+- **Communication:** REST + public gRPC (clients); internal gRPC (scanner ↔ API)
+- **Observability:** Prometheus metrics
+
+## Related ADRs
+
+- [ADR 0001](adr/0001-architecture-pattern.md) — Original Clean Architecture (evolved by ADR 0004)
+- [ADR 0002](adr/0002-async-scanner-design.md) — Scanner design (now separate service)
+- [ADR 0003](adr/0003-dual-api-rest-and-grpc.md) — Dual REST/gRPC API
+- [ADR 0004](adr/0004-modular-architecture-and-scanner-microservice.md) — Modular architecture and scanner extraction
