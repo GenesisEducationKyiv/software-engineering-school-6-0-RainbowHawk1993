@@ -25,23 +25,23 @@ type Handler struct {
 	subscriptions SubscriptionUseCase
 }
 
-type subscribeRequest struct {
+type SubscribeRequest struct {
 	Email string `json:"email"`
 	Repo  string `json:"repo"`
 }
 
-type messageResponse struct {
+type MessageResponse struct {
 	Message string `json:"message"`
 }
 
-type subscriptionResponse struct {
+type SubscriptionResponse struct {
 	Email       string `json:"email"`
 	Repo        string `json:"repo"`
 	Confirmed   bool   `json:"confirmed"`
 	LastSeenTag string `json:"last_seen_tag"`
 }
 
-type uiSubscriptionResponse struct {
+type UISubscriptionResponse struct {
 	Email            string `json:"email"`
 	Repo             string `json:"repo"`
 	Confirmed        bool   `json:"confirmed"`
@@ -96,11 +96,11 @@ func registerMetricsRoutes(r chi.Router, h http.Handler, apiKey string) {
 }
 
 func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
-	var request subscribeRequest
+	var request SubscribeRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
-		writeJSON(w, http.StatusBadRequest, messageResponse{Message: "invalid request body"})
+		writeJSON(w, http.StatusBadRequest, MessageResponse{Message: "invalid request body"})
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *Handler) Subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, messageResponse{Message: "subscription created; confirmation email sent"})
+	writeJSON(w, http.StatusOK, MessageResponse{Message: "subscription created; confirmation email sent"})
 }
 
 func (h *Handler) Confirm(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,7 @@ func (h *Handler) Confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, messageResponse{Message: "subscription confirmed successfully"})
+	writeJSON(w, http.StatusOK, MessageResponse{Message: "subscription confirmed successfully"})
 }
 
 func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +129,7 @@ func (h *Handler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, messageResponse{Message: "unsubscribed successfully"})
+	writeJSON(w, http.StatusOK, MessageResponse{Message: "unsubscribed successfully"})
 }
 
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +140,7 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := make([]subscriptionResponse, 0, len(subscriptions))
+	response := make([]SubscriptionResponse, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
 		response = append(response, toSubscriptionResponse(subscription))
 	}
@@ -156,7 +156,7 @@ func (h *Handler) ListUISubscriptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := make([]uiSubscriptionResponse, 0, len(subscriptions))
+	response := make([]UISubscriptionResponse, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
 		response = append(response, toUISubscriptionResponse(subscription))
 	}
@@ -164,8 +164,8 @@ func (h *Handler) ListUISubscriptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func toSubscriptionResponse(subscription model.Subscription) subscriptionResponse {
-	return subscriptionResponse{
+func toSubscriptionResponse(subscription model.Subscription) SubscriptionResponse {
+	return SubscriptionResponse{
 		Email:       subscription.Email,
 		Repo:        subscription.Repo(),
 		Confirmed:   subscription.Confirmed,
@@ -173,8 +173,8 @@ func toSubscriptionResponse(subscription model.Subscription) subscriptionRespons
 	}
 }
 
-func toUISubscriptionResponse(subscription model.Subscription) uiSubscriptionResponse {
-	return uiSubscriptionResponse{
+func toUISubscriptionResponse(subscription model.Subscription) UISubscriptionResponse {
+	return UISubscriptionResponse{
 		Email:            subscription.Email,
 		Repo:             subscription.Repo(),
 		Confirmed:        subscription.Confirmed,
@@ -185,11 +185,11 @@ func toUISubscriptionResponse(subscription model.Subscription) uiSubscriptionRes
 
 func writeServiceError(w http.ResponseWriter, err error) {
 	if appErr, ok := err.(apperr.AppError); ok {
-		writeJSON(w, appErr.HTTPStatus(), messageResponse{Message: appErr.Error()})
+		writeJSON(w, appErr.HTTPStatus(), MessageResponse{Message: appErr.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusInternalServerError, messageResponse{Message: "internal server error"})
+	writeJSON(w, http.StatusInternalServerError, MessageResponse{Message: "internal server error"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

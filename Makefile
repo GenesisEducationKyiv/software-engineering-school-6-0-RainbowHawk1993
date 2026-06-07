@@ -1,0 +1,90 @@
+.PHONY: help test integration-test integration-test-clean integration-test-debug e2e-test e2e-test-clean e2e-test-debug build run clean
+
+help: ## Display this help screen
+	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+test: ## Run unit tests
+	go test ./...
+
+test-verbose: ## Run unit tests with verbose output
+	go test -v ./...
+
+test-coverage: ## Run unit tests with coverage
+	go test -cover ./...
+
+integration-test: ## Run integration tests using Docker Compose
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans --abort-on-container-exit --exit-code-from integration-tests
+
+integration-test-clean: ## Run integration tests with clean state (remove containers/volumes first)
+	docker compose -f docker-compose.integration.yml down -v --remove-orphans
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans --abort-on-container-exit --exit-code-from integration-tests
+
+integration-test-debug: ## Run integration tests but keep containers for debugging
+	docker compose -f docker-compose.integration.yml up --build --remove-orphans -d db redis
+	docker compose -f docker-compose.integration.yml run --rm integration-tests
+
+integration-test-local: ## Run integration tests locally (requires PostgreSQL and Redis)
+	go test -tags=integration -v ./tests/integration
+
+e2e-test: ## Run e2e tests using Docker Compose
+	docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e-tests
+
+e2e-test-clean: ## Run e2e tests with clean state (remove containers/volumes first)
+	docker compose -f docker-compose.e2e.yml down -v
+	docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e-tests
+
+e2e-test-debug: ## Run e2e tests but keep containers for debugging
+	docker compose -f docker-compose.e2e.yml up --build -d app db redis mailpit
+	docker compose -f docker-compose.e2e.yml run --rm e2e-tests
+
+build: ## Build the application Docker image
+	docker build --target runtime -t releases-api:latest .
+
+build-test: ## Build the test Docker image
+	docker build --target test -t releases-api-test:latest .
+
+build-integration-test: ## Build the integration test Docker image
+	docker build --target integration-tests -t releases-api-integration-tests:latest .
+
+run: build ## Build and run the application
+	docker compose up -d
+
+run-dev: ## Run the application with docker compose (development)
+	docker compose up --build
+
+stop: ## Stop the application
+	docker compose down
+
+clean: ## Clean up Docker resources
+	docker compose down -v --remove-orphans
+	docker compose -f docker-compose.integration.yml down -v --remove-orphans
+	docker compose -f docker-compose.e2e.yml down -v --remove-orphans
+
+logs: ## Show application logs
+	docker compose logs -f
+
+logs-integration: ## Show integration test logs
+	docker-compose -f docker-compose.integration.yml logs -f
+
+logs-e2e: ## Show e2e test logs
+	docker-compose -f docker-compose.e2e.yml logs -f
+
+db-shell: ## Connect to the database shell (requires app running)
+	docker compose exec db psql -U postgres -d releases
+
+db-shell-integration: ## Connect to the integration test database (requires integration-test-debug)
+	docker-compose -f docker-compose.integration.yml exec db psql -U postgres -d releases
+
+redis-shell: ## Connect to the Redis CLI (requires app running)
+	docker compose exec redis redis-cli
+
+redis-shell-integration: ## Connect to the integration test Redis (requires integration-test-debug)
+	docker-compose -f docker-compose.integration.yml exec redis redis-cli
+
+fmt: ## Format code
+	go fmt ./...
+
+lint: ## Run linter
+	golangci-lint run ./...
+
+.DEFAULT_GOAL := help

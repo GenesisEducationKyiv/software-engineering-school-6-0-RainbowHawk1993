@@ -1,3 +1,5 @@
+name: releases-dev
+
 services:
   app:
     build:
