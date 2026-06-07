@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -30,15 +30,15 @@ import (
 )
 
 func main() {
-	logger := log.New(os.Stdout, "", log.LstdFlags|log.LUTC)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	if err := run(logger); err != nil {
-		logger.Printf("fatal error: %v", err)
+		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *log.Logger) error {
+func run(logger *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func run(logger *log.Logger) error {
 	})
 	defer func() {
 		if err := redisClient.Close(); err != nil {
-			logger.Printf("failed to close redis connection: %v", err)
+			logger.Error("failed to close redis connection", "error", err)
 		}
 	}()
 
@@ -91,7 +91,7 @@ func run(logger *log.Logger) error {
 
 	go func() {
 		if err := scanner.Run(ctx, cfg.ScanInterval); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Printf("scanner stopped: %v", err)
+			logger.Error("scanner stopped", "error", err)
 		}
 	}()
 
@@ -115,13 +115,13 @@ func run(logger *log.Logger) error {
 
 	serverErr := make(chan error, 2)
 	go func() {
-		logger.Printf("http listening on :%s", cfg.Port)
+		logger.Info("http listening", "port", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
 	}()
 	go func() {
-		logger.Printf("grpc listening on :%s", cfg.GRPCPort)
+		logger.Info("grpc listening", "port", cfg.GRPCPort)
 		if err := grpcServer.Serve(grpcListener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			serverErr <- err
 		}
