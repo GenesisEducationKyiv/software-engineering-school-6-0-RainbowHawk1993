@@ -21,7 +21,6 @@ type GitHubClient interface {
 	LatestReleaseTag(context.Context, string, string) (string, error)
 }
 
-// EventPublisher publishes domain events to a message broker.
 type EventPublisher interface {
 	Publish(subject string, event any) error
 }

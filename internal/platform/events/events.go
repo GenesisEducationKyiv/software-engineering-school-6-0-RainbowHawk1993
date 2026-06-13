@@ -1,10 +1,7 @@
 package events
 
-// SubjectReleaseDetected is the NATS subject for new release notifications.
 const SubjectReleaseDetected = "releases.detected"
 
-// ReleaseDetected is published by the scanner when a new release tag is found
-// for a subscription.
 type ReleaseDetected struct {
 	Email            string `json:"email"`
 	RepoOwner        string `json:"repo_owner"`

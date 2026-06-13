@@ -10,13 +10,10 @@ import (
 	"releasesapi/internal/platform/events"
 )
 
-// Mailer sends notification messages.
 type Mailer interface {
 	Send(context.Context, Message) error
 }
 
-// Consumer handles incoming release-detected events and sends email
-// notifications to subscribers.
 type Consumer struct {
 	mailer  Mailer
 	builder Builder
@@ -24,7 +21,6 @@ type Consumer struct {
 	logger  *log.Logger
 }
 
-// NewConsumer creates a Consumer with the given dependencies.
 func NewConsumer(mailer Mailer, builder Builder, baseURL string, logger *log.Logger) *Consumer {
 	if logger == nil {
 		logger = log.New(nilWriter{}, "", 0)
@@ -38,9 +34,6 @@ func NewConsumer(mailer Mailer, builder Builder, baseURL string, logger *log.Log
 	}
 }
 
-// HandleReleaseDetected processes a single ReleaseDetected event by building
-// and sending a notification email. It returns an error if the email cannot be
-// sent, which signals the broker to redeliver.
 func (c *Consumer) HandleReleaseDetected(ctx context.Context, event events.ReleaseDetected) error {
 	message := c.builder.BuildReleaseNotificationFromEvent(event, c.baseURL)
 
@@ -55,8 +48,6 @@ func (c *Consumer) HandleReleaseDetected(ctx context.Context, event events.Relea
 	return nil
 }
 
-// HandleReleaseDetectedRaw deserializes raw NATS message data and delegates
-// to HandleReleaseDetected. This is the function wired to the NATS subscription.
 func (c *Consumer) HandleReleaseDetectedRaw(ctx context.Context, data []byte) error {
 	var event events.ReleaseDetected
 	if err := json.Unmarshal(data, &event); err != nil {
