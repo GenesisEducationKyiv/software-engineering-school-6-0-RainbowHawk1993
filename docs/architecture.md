@@ -1,10 +1,10 @@
 # System Architecture
 
-**Date:** 2026-06-07
+**Date:** 2026-06-13
 
 ## Overview
 
-The GitHub Release Notification system is a modular Go application split into an **API service** and a **Scanner microservice**. The API handles subscription lifecycle and exposes REST and gRPC interfaces. The Scanner polls GitHub for new releases and notifies subscribers via email, communicating with the API through an internal gRPC contract.
+The GitHub Release Notification system is a modular Go application split into an **API service**, a **Scanner microservice**, and a **Notification service**. The API handles subscription lifecycle and exposes REST and gRPC interfaces. The Scanner polls GitHub for new releases and publishes events to NATS, while the Notification service consumes these events and handles email delivery.
 
 ## Assumptions
 
@@ -38,9 +38,9 @@ The GitHub Release Notification system is a modular Go application split into an
 | Domain | Owner | Responsibility |
 |--------|-------|----------------|
 | Subscription | API service | Lifecycle, PostgreSQL persistence |
-| Release Scanner | Scanner service | Polling, notification dispatch, `last_seen_tag` updates via gRPC |
+| Release Scanner | Scanner service | Polling, publishing `ReleaseDetected` events, `last_seen_tag` updates via gRPC |
 | GitHub Integration | Shared module | Repo validation, release tags, Redis cache |
-| Notification | Shared module | Email templates and SMTP |
+| Notification | Notification service / API | Email templates and SMTP delivery (confirmations via API, release updates via Notification service) |
 | Platform | Shared | Config, migrations, metrics, errors |
 
 ## Component Diagram
@@ -128,7 +128,7 @@ sequenceDiagram
 - **Persistence:** PostgreSQL (API service only)
 - **Caching:** Redis for GitHub API responses
 - **Message Broker:** NATS for async event delivery
-- **Communication:** REST + public gRPC (clients); internal gRPC (scanner ↔ API)
+- **Communication:** REST + public gRPC (clients); internal gRPC (scanner ↔ API); NATS event streaming (scanner ↔ notification service)
 - **Observability:** Prometheus metrics
 
 ## Related ADRs
