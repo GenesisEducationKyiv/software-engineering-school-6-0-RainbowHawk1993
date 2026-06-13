@@ -50,7 +50,11 @@ func run(logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	defer func() {
+		if err := sub.Unsubscribe(); err != nil {
+			logger.Printf("failed to unsubscribe: %v", err)
+		}
+	}()
 
 	logger.Printf("listening for events on %s", events.SubjectReleaseDetected)
 
