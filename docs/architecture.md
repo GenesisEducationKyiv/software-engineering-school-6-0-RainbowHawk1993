@@ -61,10 +61,16 @@ graph TD
     subgraph scannerSvc [Scanner Service cmd/scanner]
         ScanApp[Scanner Application] -->|gRPC| InternalGRPC
         ScanApp --> GHMod2[GitHub Module]
-        ScanApp --> NotifMod2[Notification Module]
+        ScanApp --> NATSClient[NATS Publisher]
+    end
+
+    subgraph notifSvc [Notification Service cmd/notification]
+        NotifConsumer[Notification Consumer] --> NotifMod2[Notification Module]
     end
 
     GHMod & GHMod2 --> Redis[(Redis)]
+    NATSClient -->|Publish ReleaseDetected| NATS[(NATS Broker)]
+    NATS -->|Consume ReleaseDetected| NotifConsumer
     NotifMod & NotifMod2 --> SMTP[SMTP]
 ```
 
@@ -92,22 +98,36 @@ sequenceDiagram
     participant Scanner
     participant API as API Internal gRPC
     participant GitHub
-    participant Mailer
+    participant NATS
 
     Scanner->>API: ListConfirmedForScan
     API-->>Scanner: subscriptions
     Scanner->>GitHub: LatestReleaseTag
     GitHub-->>Scanner: tag
     alt new tag detected
-        Scanner->>Mailer: Send release email
         Scanner->>API: UpdateLastSeenTag
+        Scanner->>NATS: Publish ReleaseDetected Event
     end
+```
+
+## Notification Flow
+
+```mermaid
+sequenceDiagram
+    participant NATS
+    participant NotificationSvc
+    participant Mailer
+
+    NATS->>NotificationSvc: Deliver ReleaseDetected Event
+    NotificationSvc->>NotificationSvc: Build Email from Event
+    NotificationSvc->>Mailer: Send release email
 ```
 
 ## Technology Choices
 
 - **Persistence:** PostgreSQL (API service only)
 - **Caching:** Redis for GitHub API responses
+- **Message Broker:** NATS for async event delivery
 - **Communication:** REST + public gRPC (clients); internal gRPC (scanner ↔ API)
 - **Observability:** Prometheus metrics
 
@@ -117,3 +137,4 @@ sequenceDiagram
 - [ADR 0002](adr/0002-async-scanner-design.md) — Scanner design (now separate service)
 - [ADR 0003](adr/0003-dual-api-rest-and-grpc.md) — Dual REST/gRPC API
 - [ADR 0004](adr/0004-modular-architecture-and-scanner-microservice.md) — Modular architecture and scanner extraction
+- [ADR 0005](adr/0005-nats-message-broker-and-notification-service.md) — NATS message broker and Notification service

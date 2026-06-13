@@ -9,12 +9,13 @@ import (
 	"syscall"
 
 	"releasesapi/internal/modules/github"
-	"releasesapi/internal/modules/notification"
 	scanapp "releasesapi/internal/modules/scanner/application"
 	scannerinfra "releasesapi/internal/modules/scanner/infrastructure"
 	"releasesapi/internal/platform/config"
 	"releasesapi/internal/platform/metrics"
+	nats_platform "releasesapi/internal/platform/nats"
 
+	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -60,11 +61,17 @@ func run(logger *log.Logger) error {
 		return err
 	}
 
+	natsConn, err := nats.Connect(cfg.NATS.URL)
+	if err != nil {
+		return err
+	}
+	defer natsConn.Close()
+
+	publisher := nats_platform.NewPublisher(natsConn)
+
 	githubCache := github.NewRedisCache(redisClient)
 	githubClient := github.NewClient(cfg.GitHubToken, githubCache, serviceMetrics, logger)
-	smtpMailer := notification.NewSMTPMailer(cfg.SMTP)
-	notificationBuilder := notification.NewDefaultBuilder()
-	scanner := scanapp.NewScanner(store, githubClient, smtpMailer, notificationBuilder, logger, cfg.AppBaseURL, serviceMetrics)
+	scanner := scanapp.NewScanner(store, githubClient, publisher, logger, cfg.AppBaseURL, serviceMetrics)
 
 	logger.Printf("scanner connected to subscription api at %s", cfg.SubscriptionAPIGRPCAddr)
 

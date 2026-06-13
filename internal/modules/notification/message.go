@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"releasesapi/internal/modules/subscription/domain"
+	"releasesapi/internal/platform/events"
 )
 
 type Message struct {
@@ -26,6 +27,7 @@ type SMTPConfig struct {
 type Builder interface {
 	BuildConfirmation(sub domain.Subscription, baseURL string) Message
 	BuildReleaseNotification(sub domain.Subscription, tag string, baseURL string) Message
+	BuildReleaseNotificationFromEvent(event events.ReleaseDetected, baseURL string) Message
 }
 
 type DefaultBuilder struct{}
@@ -56,6 +58,20 @@ func (b *DefaultBuilder) BuildReleaseNotification(sub domain.Subscription, tag s
 			fmt.Sprintf("Latest tag: %s", tag),
 			"",
 			fmt.Sprintf("Unsubscribe: %s/api/unsubscribe/%s", baseURL, sub.UnsubscribeToken),
+		}, "\n"),
+	}
+}
+
+func (b *DefaultBuilder) BuildReleaseNotificationFromEvent(event events.ReleaseDetected, baseURL string) Message {
+	repo := event.RepoOwner + "/" + event.RepoName
+	return Message{
+		To:      event.Email,
+		Subject: fmt.Sprintf("New release for %s: %s", repo, event.Tag),
+		Body: strings.Join([]string{
+			fmt.Sprintf("A new release is available for %s.", repo),
+			fmt.Sprintf("Latest tag: %s", event.Tag),
+			"",
+			fmt.Sprintf("Unsubscribe: %s/api/unsubscribe/%s", baseURL, event.UnsubscribeToken),
 		}, "\n"),
 	}
 }
