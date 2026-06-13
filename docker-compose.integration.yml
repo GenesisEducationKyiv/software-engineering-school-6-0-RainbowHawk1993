@@ -28,6 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "5435:5432"
     volumes:
       - postgres_data_integration:/var/lib/postgresql/data
     networks:
@@ -41,6 +43,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "6379:6379"
     networks:
       - test-network
 
