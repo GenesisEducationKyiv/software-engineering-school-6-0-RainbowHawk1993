@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"releasesapi/internal/api"
-	"releasesapi/internal/mailer"
-	appmetrics "releasesapi/internal/metrics"
-	"releasesapi/internal/migrations"
-	"releasesapi/internal/service"
-	"releasesapi/internal/store"
+	"releasesapi/internal/modules/notification"
+	subapp "releasesapi/internal/modules/subscription/application"
+	subinfra "releasesapi/internal/modules/subscription/infrastructure"
+	"releasesapi/internal/platform/metrics"
+	"releasesapi/internal/platform/migrations"
+	"releasesapi/internal/transport/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -47,7 +47,7 @@ func (m *mockGitHubClient) LatestReleaseTag(ctx context.Context, owner, repo str
 
 type mockMailer struct{}
 
-func (m *mockMailer) Send(ctx context.Context, msg mailer.Message) error {
+func (m *mockMailer) Send(ctx context.Context, msg notification.Message) error {
 	return nil
 }
 
@@ -125,12 +125,12 @@ func setupTestServer(t *testing.T) *TestServer {
 	}
 
 	logger := log.New(io.Discard, "", 0)
-	registry, serviceMetrics := appmetrics.NewRegistry()
-	subscriptionStore := store.NewPostgresSubscriptionStore(db)
+	registry, serviceMetrics := metrics.NewRegistry()
+	subscriptionStore := subinfra.NewPostgresSubscriptionStore(db)
 	githubClient := &mockGitHubClient{}
 	smtpMailer := &mockMailer{}
-	notificationBuilder := &mailer.DefaultNotificationBuilder{}
-	subscriptionService := service.NewSubscriptionService(
+	notificationBuilder := notification.NewDefaultBuilder()
+	subscriptionService := subapp.NewService(
 		subscriptionStore,
 		githubClient,
 		smtpMailer,
