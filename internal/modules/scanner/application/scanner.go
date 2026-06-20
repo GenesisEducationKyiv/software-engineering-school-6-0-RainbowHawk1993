@@ -8,7 +8,6 @@ import (
 
 	"releasesapi/internal/modules/subscription/domain"
 	"releasesapi/internal/platform/apperr"
-	"releasesapi/internal/platform/events"
 	"releasesapi/internal/platform/metrics"
 )
 
@@ -32,6 +31,7 @@ type Scanner struct {
 	logger    *log.Logger
 	baseURL   string
 	metrics   *metrics.ServiceMetrics
+	saga      *ReleaseSagaOrchestrator
 }
 
 func NewScanner(store Store, github GitHubClient, publisher EventPublisher, logger *log.Logger, baseURL string, serviceMetrics *metrics.ServiceMetrics) *Scanner {
@@ -46,6 +46,7 @@ func NewScanner(store Store, github GitHubClient, publisher EventPublisher, logg
 		logger:    logger,
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		metrics:   serviceMetrics,
+		saga:      NewReleaseSagaOrchestrator(store, publisher, logger),
 	}
 }
 
@@ -115,24 +116,11 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 				continue
 			}
 
-			if err := s.store.UpdateLastSeenTag(ctx, subscription.ID, tag); err != nil {
-				s.logger.Printf("failed to update last_seen_tag for subscription %d: %v", subscription.ID, err)
-				continue
-			}
-
-			event := events.ReleaseDetected{
-				Email:            subscription.Email,
-				RepoOwner:        subscription.RepoOwner,
-				RepoName:         subscription.RepoName,
-				Tag:              tag,
-				UnsubscribeToken: subscription.UnsubscribeToken,
-			}
-
-			if err := s.publisher.Publish(events.SubjectReleaseDetected, event); err != nil {
+			if err := s.saga.ProcessRelease(ctx, subscription, tag); err != nil {
 				if s.metrics != nil {
 					s.metrics.NotificationsFailedTotal.Inc()
 				}
-				s.logger.Printf("failed to publish ReleaseDetected event for %s: %v", subscription.Email, err)
+				s.logger.Printf("failed to process release saga for %s: %v", subscription.Email, err)
 				continue
 			}
 

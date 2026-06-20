@@ -80,9 +80,16 @@ func TestScannerContinuesOnPublishFailure(t *testing.T) {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
 
-	// Tag should still be updated (at-least-once: update first, then publish)
-	if len(store.updateCalls) != 1 {
-		t.Fatalf("expected 1 last_seen_tag update, got %d", len(store.updateCalls))
+	// Tag should be updated to new tag, then reverted back to old tag due to Saga compensation
+	if len(store.updateCalls) != 2 {
+		t.Fatalf("expected 2 last_seen_tag updates (update + compensation), got %d", len(store.updateCalls))
+	}
+
+	if store.updateCalls[0].tag != "v1.0.0" {
+		t.Fatalf("expected first update to be v1.0.0, got %q", store.updateCalls[0].tag)
+	}
+	if store.updateCalls[1].tag != "" {
+		t.Fatalf("expected second update (compensation) to be \"\", got %q", store.updateCalls[1].tag)
 	}
 }
 
