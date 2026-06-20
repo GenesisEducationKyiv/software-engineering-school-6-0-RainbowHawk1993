@@ -42,7 +42,7 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
-      mailpit:
+      nats:
         condition: service_started
     environment:
       SUBSCRIPTION_API_GRPC_ADDR: ${SUBSCRIPTION_API_GRPC_ADDR:-api:9091}
@@ -50,14 +50,33 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       SCAN_INTERVAL: ${SCAN_INTERVAL:-15m}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+  notification:
+    build:
+      context: .
+      target: notification-runtime
+    depends_on:
+      nats:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@releases-api.local}
-      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: ${REDIS_DB:-0}
+
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
 
   db:
     image: postgres:16-alpine

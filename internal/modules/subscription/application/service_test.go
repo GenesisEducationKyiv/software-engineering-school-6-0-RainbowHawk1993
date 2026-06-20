@@ -10,6 +10,7 @@ import (
 	"releasesapi/internal/modules/subscription/domain"
 	"releasesapi/internal/modules/subscription/ports"
 	"releasesapi/internal/platform/apperr"
+	"releasesapi/internal/platform/events"
 )
 
 type fakeStore struct {
@@ -119,6 +120,10 @@ func (f *fakeBuilder) BuildConfirmation(sub domain.Subscription, baseURL string)
 
 func (f *fakeBuilder) BuildReleaseNotification(sub domain.Subscription, tag, baseURL string) notification.Message {
 	return notification.Message{To: sub.Email, Body: "Notification"}
+}
+
+func (f *fakeBuilder) BuildReleaseNotificationFromEvent(event events.ReleaseDetected, baseURL string) notification.Message {
+	return notification.Message{To: event.Email, Body: "Notification"}
 }
 
 func TestSubscribeSuccess(t *testing.T) {

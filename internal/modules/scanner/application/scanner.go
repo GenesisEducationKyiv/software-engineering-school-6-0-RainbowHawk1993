@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"releasesapi/internal/modules/notification"
 	"releasesapi/internal/modules/subscription/domain"
 	"releasesapi/internal/platform/apperr"
+	"releasesapi/internal/platform/events"
 	"releasesapi/internal/platform/metrics"
 )
 
@@ -21,33 +21,31 @@ type GitHubClient interface {
 	LatestReleaseTag(context.Context, string, string) (string, error)
 }
 
-type Mailer interface {
-	Send(context.Context, notification.Message) error
+type EventPublisher interface {
+	Publish(subject string, event any) error
 }
 
 type Scanner struct {
-	store   Store
-	github  GitHubClient
-	mailer  Mailer
-	builder notification.Builder
-	logger  *log.Logger
-	baseURL string
-	metrics *metrics.ServiceMetrics
+	store     Store
+	github    GitHubClient
+	publisher EventPublisher
+	logger    *log.Logger
+	baseURL   string
+	metrics   *metrics.ServiceMetrics
 }
 
-func NewScanner(store Store, github GitHubClient, mailer Mailer, builder notification.Builder, logger *log.Logger, baseURL string, serviceMetrics *metrics.ServiceMetrics) *Scanner {
+func NewScanner(store Store, github GitHubClient, publisher EventPublisher, logger *log.Logger, baseURL string, serviceMetrics *metrics.ServiceMetrics) *Scanner {
 	if logger == nil {
 		logger = log.New(nilWriter{}, "", 0)
 	}
 
 	return &Scanner{
-		store:   store,
-		github:  github,
-		mailer:  mailer,
-		builder: builder,
-		logger:  logger,
-		baseURL: strings.TrimRight(baseURL, "/"),
-		metrics: serviceMetrics,
+		store:     store,
+		github:    github,
+		publisher: publisher,
+		logger:    logger,
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		metrics:   serviceMetrics,
 	}
 }
 
@@ -117,13 +115,24 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 				continue
 			}
 
-			message := s.builder.BuildReleaseNotification(subscription, tag, s.baseURL)
+			if err := s.store.UpdateLastSeenTag(ctx, subscription.ID, tag); err != nil {
+				s.logger.Printf("failed to update last_seen_tag for subscription %d: %v", subscription.ID, err)
+				continue
+			}
 
-			if err := s.mailer.Send(ctx, message); err != nil {
+			event := events.ReleaseDetected{
+				Email:            subscription.Email,
+				RepoOwner:        subscription.RepoOwner,
+				RepoName:         subscription.RepoName,
+				Tag:              tag,
+				UnsubscribeToken: subscription.UnsubscribeToken,
+			}
+
+			if err := s.publisher.Publish(events.SubjectReleaseDetected, event); err != nil {
 				if s.metrics != nil {
 					s.metrics.NotificationsFailedTotal.Inc()
 				}
-				s.logger.Printf("email send failed for %s: %v", subscription.Email, err)
+				s.logger.Printf("failed to publish ReleaseDetected event for %s: %v", subscription.Email, err)
 				continue
 			}
 
@@ -131,9 +140,8 @@ func (s *Scanner) RunOnce(ctx context.Context) error {
 				s.metrics.NotificationsSentTotal.Inc()
 			}
 
-			if err := s.store.UpdateLastSeenTag(ctx, subscription.ID, tag); err != nil {
-				s.logger.Printf("failed to update last_seen_tag for subscription %d: %v", subscription.ID, err)
-			}
+			s.logger.Printf("published ReleaseDetected event for %s (%s/%s@%s)",
+				subscription.Email, repoOwner, repoName, tag)
 		}
 	}
 

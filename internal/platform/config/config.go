@@ -16,6 +16,10 @@ type RedisConfig struct {
 	DB       int
 }
 
+type NATSConfig struct {
+	URL string
+}
+
 type APIConfig struct {
 	Port              string
 	GRPCPort          string
@@ -34,8 +38,14 @@ type ScannerConfig struct {
 	GitHubToken             string
 	AppBaseURL              string
 	ScanInterval            time.Duration
-	SMTP                    notification.SMTPConfig
+	NATS                    NATSConfig
 	Redis                   RedisConfig
+}
+
+type NotificationConfig struct {
+	NATS       NATSConfig
+	AppBaseURL string
+	SMTP       notification.SMTPConfig
 }
 
 func LoadAPI() (APIConfig, error) {
@@ -78,11 +88,6 @@ func LoadScanner() (ScannerConfig, error) {
 		return ScannerConfig{}, err
 	}
 
-	smtpPort, err := parseSMTPPort()
-	if err != nil {
-		return ScannerConfig{}, err
-	}
-
 	redisDB, err := parseRedisDB()
 	if err != nil {
 		return ScannerConfig{}, err
@@ -94,17 +99,34 @@ func LoadScanner() (ScannerConfig, error) {
 		GitHubToken:             strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),
 		AppBaseURL:              strings.TrimRight(valueOrDefault("APP_BASE_URL", "http://localhost:8080"), "/"),
 		ScanInterval:            scanInterval,
+		NATS: NATSConfig{
+			URL: valueOrDefault("NATS_URL", "nats://localhost:4222"),
+		},
+		Redis: RedisConfig{
+			Addr:     valueOrDefault("REDIS_ADDR", "redis:6379"),
+			Password: strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
+			DB:       redisDB,
+		},
+	}, nil
+}
+
+func LoadNotification() (NotificationConfig, error) {
+	smtpPort, err := parseSMTPPort()
+	if err != nil {
+		return NotificationConfig{}, err
+	}
+
+	return NotificationConfig{
+		NATS: NATSConfig{
+			URL: valueOrDefault("NATS_URL", "nats://localhost:4222"),
+		},
+		AppBaseURL: strings.TrimRight(valueOrDefault("APP_BASE_URL", "http://localhost:8080"), "/"),
 		SMTP: notification.SMTPConfig{
 			Host:     valueOrDefault("SMTP_HOST", "mailpit"),
 			Port:     smtpPort,
 			Username: strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
 			Password: strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
 			From:     valueOrDefault("SMTP_FROM", "noreply@releases-api.local"),
-		},
-		Redis: RedisConfig{
-			Addr:     valueOrDefault("REDIS_ADDR", "redis:6379"),
-			Password: strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
-			DB:       redisDB,
 		},
 	}, nil
 }
