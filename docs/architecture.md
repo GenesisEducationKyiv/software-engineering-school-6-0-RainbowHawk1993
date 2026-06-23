@@ -1,6 +1,6 @@
 # System Architecture
 
-**Date:** 2026-06-13
+**Date:** 2026-06-20
 
 ## Overview
 
@@ -91,11 +91,11 @@ sequenceDiagram
     Mailer-->>User: Confirmation link
 ```
 
-## Scanner Flow
+## Scanner Flow (Saga)
 
 ```mermaid
 sequenceDiagram
-    participant Scanner
+    participant Scanner as Scanner (Orchestrator)
     participant API as API Internal gRPC
     participant GitHub
     participant NATS
@@ -105,8 +105,11 @@ sequenceDiagram
     Scanner->>GitHub: LatestReleaseTag
     GitHub-->>Scanner: tag
     alt new tag detected
-        Scanner->>API: UpdateLastSeenTag
+        Scanner->>API: UpdateLastSeenTag (new tag)
         Scanner->>NATS: Publish ReleaseDetected Event
+        alt publish fails
+            Scanner->>API: UpdateLastSeenTag (revert to old tag)
+        end
     end
 ```
 
@@ -138,3 +141,4 @@ sequenceDiagram
 - [ADR 0003](adr/0003-dual-api-rest-and-grpc.md) — Dual REST/gRPC API
 - [ADR 0004](adr/0004-modular-architecture-and-scanner-microservice.md) — Modular architecture and scanner extraction
 - [ADR 0005](adr/0005-nats-message-broker-and-notification-service.md) — NATS message broker and Notification service
+- [ADR 0006](adr/0006-orchestrated-saga-for-release-notification.md) — Orchestrated Saga for release notifications
