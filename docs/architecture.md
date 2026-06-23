@@ -40,7 +40,7 @@ The GitHub Release Notification system is a modular Go application split into an
 | Subscription | API service | Lifecycle, PostgreSQL persistence |
 | Release Scanner | Scanner service | Polling, publishing `ReleaseDetected` events, `last_seen_tag` updates via gRPC |
 | GitHub Integration | Shared module | Repo validation, release tags, Redis cache |
-| Notification | Notification service / API | Email templates and SMTP delivery (confirmations via API, release updates via Notification service) |
+| Notification | Notification service / API | Email templates and SMTP delivery (confirmations via API or gRPC to Notification service, release updates via Notification service) |
 | Platform | Shared | Config, migrations, metrics, errors |
 
 ## Component Diagram
@@ -56,6 +56,7 @@ graph TD
         SubApp --> GHMod[GitHub Module]
         SubApp --> NotifMod[Notification Module]
         InternalGRPC[Internal gRPC :9091] --> SubStore
+        SubApp -->|gRPC| NotifGRPC[Notification gRPC :9092]
     end
 
     subgraph scannerSvc [Scanner Service cmd/scanner]
@@ -66,6 +67,7 @@ graph TD
 
     subgraph notifSvc [Notification Service cmd/notification]
         NotifConsumer[Notification Consumer] --> NotifMod2[Notification Module]
+        NotifGRPC --> NotifMod2
     end
 
     GHMod & GHMod2 --> Redis[(Redis)]
@@ -87,7 +89,7 @@ sequenceDiagram
     API->>API: Validate input
     API->>API: Verify repo (GitHub)
     API->>Store: Create pending subscription
-    API->>Mailer: Send confirmation email
+    API->>Mailer: Send confirmation email (Local SMTP or gRPC to Notification Service)
     Mailer-->>User: Confirmation link
 ```
 
@@ -142,3 +144,4 @@ sequenceDiagram
 - [ADR 0004](adr/0004-modular-architecture-and-scanner-microservice.md) — Modular architecture and scanner extraction
 - [ADR 0005](adr/0005-nats-message-broker-and-notification-service.md) — NATS message broker and Notification service
 - [ADR 0006](adr/0006-orchestrated-saga-for-release-notification.md) — Orchestrated Saga for release notifications
+- [ADR 0007](adr/0007-grpc-mail-verification.md) — gRPC Mail Verification Service

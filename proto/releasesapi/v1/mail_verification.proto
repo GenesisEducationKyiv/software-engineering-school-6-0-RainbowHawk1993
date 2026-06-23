@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package releasesapi.v1;
+
+option go_package = "releasesapi/gen/mailv1;mailv1";
+
+service MailVerificationService {
+  rpc SendVerificationEmail(SendVerificationEmailRequest) returns (SendVerificationEmailResponse);
+}
+
+message SendVerificationEmailRequest {
+  string email = 1;
+  string repo_owner = 2;
+  string repo_name = 3;
+  string confirm_token = 4;
+  string unsubscribe_token = 5;
+}
+
+message SendVerificationEmailResponse {}

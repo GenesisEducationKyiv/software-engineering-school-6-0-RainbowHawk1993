@@ -1,0 +1,11 @@
+version: v1
+name: buf.build/releasesapi/releasesapi
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_SAME_GO_PACKAGE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+

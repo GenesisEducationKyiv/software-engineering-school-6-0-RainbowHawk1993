@@ -87,7 +87,19 @@ func run(logger *log.Logger) error {
 	githubClient := github.NewClient(cfg.GitHubToken, githubCache, serviceMetrics, logger)
 	smtpMailer := notification.NewSMTPMailer(cfg.SMTP)
 	notificationBuilder := notification.NewDefaultBuilder()
-	subscriptionService := subapp.NewService(subscriptionStore, githubClient, smtpMailer, notificationBuilder, cfg.AppBaseURL)
+
+	var grpcSender subapp.VerificationSender
+	if cfg.NotificationGRPCAddr != "" {
+		grpcClient, err := subinfra.NewNotificationGRPCClient(cfg.NotificationGRPCAddr)
+		if err != nil {
+			logger.Printf("failed to connect to notification grpc: %v", err)
+		} else {
+			grpcSender = grpcClient
+			logger.Printf("api connected to notification grpc at %s", cfg.NotificationGRPCAddr)
+		}
+	}
+
+	subscriptionService := subapp.NewService(subscriptionStore, githubClient, smtpMailer, grpcSender, notificationBuilder, cfg.AppBaseURL)
 
 	router := api.NewRouter(api.NewHandler(subscriptionService), logger, serviceMetrics, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}), cfg.APIKey)
 	server := &http.Server{
