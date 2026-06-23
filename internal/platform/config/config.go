@@ -21,15 +21,16 @@ type NATSConfig struct {
 }
 
 type APIConfig struct {
-	Port              string
-	GRPCPort          string
-	InternalGRPCPort  string
-	APIKey            string
-	DatabaseURL       string
-	GitHubToken       string
-	AppBaseURL        string
-	SMTP              notification.SMTPConfig
-	Redis             RedisConfig
+	Port                 string
+	GRPCPort             string
+	InternalGRPCPort     string
+	NotificationGRPCAddr string
+	APIKey               string
+	DatabaseURL          string
+	GitHubToken          string
+	AppBaseURL           string
+	SMTP                 notification.SMTPConfig
+	Redis                RedisConfig
 }
 
 type ScannerConfig struct {
@@ -44,6 +45,7 @@ type ScannerConfig struct {
 
 type NotificationConfig struct {
 	NATS       NATSConfig
+	GRPCPort   string
 	AppBaseURL string
 	SMTP       notification.SMTPConfig
 }
@@ -60,10 +62,11 @@ func LoadAPI() (APIConfig, error) {
 	}
 
 	return APIConfig{
-		Port:             valueOrDefault("PORT", "8080"),
-		GRPCPort:         valueOrDefault("GRPC_PORT", "9090"),
-		InternalGRPCPort: valueOrDefault("INTERNAL_GRPC_PORT", "9091"),
-		APIKey:           valueOrDefault("API_KEY", "dev-api-key"),
+		Port:                 valueOrDefault("PORT", "8080"),
+		GRPCPort:             valueOrDefault("GRPC_PORT", "9090"),
+		InternalGRPCPort:     valueOrDefault("INTERNAL_GRPC_PORT", "9091"),
+		NotificationGRPCAddr: valueOrDefault("NOTIFICATION_GRPC_ADDR", "notification:9092"),
+		APIKey:               valueOrDefault("API_KEY", "dev-api-key"),
 		DatabaseURL:      valueOrDefault("DATABASE_URL", "postgres://postgres:postgres@db:5432/releases?sslmode=disable"),
 		GitHubToken:      strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),
 		AppBaseURL:       strings.TrimRight(valueOrDefault("APP_BASE_URL", "http://localhost:8080"), "/"),
@@ -120,6 +123,7 @@ func LoadNotification() (NotificationConfig, error) {
 		NATS: NATSConfig{
 			URL: valueOrDefault("NATS_URL", "nats://localhost:4222"),
 		},
+		GRPCPort:   valueOrDefault("GRPC_PORT", "9092"),
 		AppBaseURL: strings.TrimRight(valueOrDefault("APP_BASE_URL", "http://localhost:8080"), "/"),
 		SMTP: notification.SMTPConfig{
 			Host:     valueOrDefault("SMTP_HOST", "mailpit"),

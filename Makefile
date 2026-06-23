@@ -87,4 +87,12 @@ fmt: ## Format code
 lint: ## Run linter
 	golangci-lint run ./...
 
+proto-lint: ## Lint protobuf files
+	docker run --rm -v $$(pwd)/proto:/workspace -w /workspace bufbuild/buf lint
+
+proto-generate: ## Generate protobuf files
+	docker run --rm -v $$(pwd):/app -w /app/proto bufbuild/buf generate
+
+
+
 .DEFAULT_GOAL := help

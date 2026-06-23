@@ -1,0 +1,10 @@
+version: v1
+plugins:
+  - plugin: buf.build/protocolbuffers/go:v1.34.2
+    out: ../
+    opt: module=releasesapi
+  - plugin: buf.build/grpc/go:v1.4.0
+    out: ../
+    opt: module=releasesapi
+
+

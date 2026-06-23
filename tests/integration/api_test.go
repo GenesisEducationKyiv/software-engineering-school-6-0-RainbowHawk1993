@@ -134,6 +134,7 @@ func setupTestServer(t *testing.T) *TestServer {
 		subscriptionStore,
 		githubClient,
 		smtpMailer,
+		nil,
 		notificationBuilder,
 		testAppBaseURL,
 	)

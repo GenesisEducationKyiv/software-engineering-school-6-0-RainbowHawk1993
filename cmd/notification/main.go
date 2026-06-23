@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"releasesapi/gen/mailv1"
 	"releasesapi/internal/modules/notification"
 	"releasesapi/internal/platform/config"
 	"releasesapi/internal/platform/events"
 
 	"github.com/nats-io/nats.go"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -58,8 +61,29 @@ func run(logger *log.Logger) error {
 
 	logger.Printf("listening for events on %s", events.SubjectReleaseDetected)
 
-	<-ctx.Done()
+	grpcListener, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		return err
+	}
+	grpcServer := grpc.NewServer()
+	mailVerificationServer := notification.NewMailVerificationServer(smtpMailer, builder, cfg.AppBaseURL)
+	mailv1.RegisterMailVerificationServiceServer(grpcServer, mailVerificationServer)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Printf("grpc listening on :%s", cfg.GRPCPort)
+		if err := grpcServer.Serve(grpcListener); err != nil {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+	}
 
 	logger.Printf("shutting down notification service")
+	grpcServer.GracefulStop()
 	return nil
 }

@@ -25,21 +25,27 @@ type Mailer interface {
 	Send(context.Context, notification.Message) error
 }
 
-type Service struct {
-	store   ports.Repository
-	github  GitHubClient
-	mailer  Mailer
-	builder notification.Builder
-	baseURL string
+type VerificationSender interface {
+	SendVerification(ctx context.Context, sub domain.Subscription) error
 }
 
-func NewService(store ports.Repository, github GitHubClient, mailer Mailer, builder notification.Builder, baseURL string) *Service {
+type Service struct {
+	store      ports.Repository
+	github     GitHubClient
+	mailer     Mailer
+	grpcSender VerificationSender
+	builder    notification.Builder
+	baseURL    string
+}
+
+func NewService(store ports.Repository, github GitHubClient, mailer Mailer, grpcSender VerificationSender, builder notification.Builder, baseURL string) *Service {
 	return &Service{
-		store:   store,
-		github:  github,
-		mailer:  mailer,
-		builder: builder,
-		baseURL: strings.TrimRight(baseURL, "/"),
+		store:      store,
+		github:     github,
+		mailer:     mailer,
+		grpcSender: grpcSender,
+		builder:    builder,
+		baseURL:    strings.TrimRight(baseURL, "/"),
 	}
 }
 
@@ -85,11 +91,17 @@ func (s *Service) Subscribe(ctx context.Context, email, repo string) (domain.Sub
 		return domain.Subscription{}, err
 	}
 
-	message := s.builder.BuildConfirmation(subscription, s.baseURL)
-
-	if err := s.mailer.Send(ctx, message); err != nil {
-		_ = s.store.DeleteSubscription(ctx, subscription.ID)
-		return domain.Subscription{}, err
+	if s.grpcSender != nil {
+		if err := s.grpcSender.SendVerification(ctx, subscription); err != nil {
+			_ = s.store.DeleteSubscription(ctx, subscription.ID)
+			return domain.Subscription{}, err
+		}
+	} else {
+		message := s.builder.BuildConfirmation(subscription, s.baseURL)
+		if err := s.mailer.Send(ctx, message); err != nil {
+			_ = s.store.DeleteSubscription(ctx, subscription.ID)
+			return domain.Subscription{}, err
+		}
 	}
 
 	return subscription, nil
