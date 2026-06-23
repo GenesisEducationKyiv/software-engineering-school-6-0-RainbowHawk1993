@@ -1,0 +1,113 @@
+name: releases-dev
+
+services:
+  api:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: ${PORT:-8080}
+      GRPC_PORT: ${GRPC_PORT:-9090}
+      INTERNAL_GRPC_PORT: ${INTERNAL_GRPC_PORT:-9091}
+      API_KEY: ${API_KEY:-dev-api-key}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/releases?sslmode=disable}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@releases-api.local}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "9091:9091"
+
+  scanner:
+    build:
+      context: .
+      target: scanner-runtime
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    environment:
+      SUBSCRIPTION_API_GRPC_ADDR: ${SUBSCRIPTION_API_GRPC_ADDR:-api:9091}
+      API_KEY: ${API_KEY:-dev-api-key}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-15m}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+  notification:
+    build:
+      context: .
+      target: notification-runtime
+    depends_on:
+      nats:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@releases-api.local}
+
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: releases
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d releases"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit:v1.24
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

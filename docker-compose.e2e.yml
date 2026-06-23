@@ -1,0 +1,124 @@
+name: releases-e2e
+
+services:
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: tests/e2e/Dockerfile.e2e
+    depends_on:
+      api:
+        condition: service_healthy
+    network_mode: "service:api"
+    environment:
+      BASE_URL: "http://localhost:8080"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      GRPC_PORT: 9090
+      INTERNAL_GRPC_PORT: 9091
+      API_KEY: "test-api-key-12345"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/releases_e2e?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      APP_BASE_URL: "http://localhost:8080"
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: "1025"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e-network
+
+  scanner:
+    build:
+      context: .
+      target: scanner-runtime
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SUBSCRIPTION_API_GRPC_ADDR: "api:9091"
+      API_KEY: "test-api-key-12345"
+      REDIS_ADDR: "redis:6379"
+      APP_BASE_URL: "http://localhost:8080"
+      NATS_URL: "nats://nats:4222"
+      SCAN_INTERVAL: "1m"
+    networks:
+      - e2e-network
+
+  notification:
+    build:
+      context: .
+      target: notification-runtime
+    depends_on:
+      nats:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      NATS_URL: "nats://nats:4222"
+      APP_BASE_URL: "http://localhost:8080"
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: "1025"
+    networks:
+      - e2e-network
+
+  nats:
+    image: nats:2-alpine
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e-network
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: releases_e2e
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d releases_e2e"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data_e2e:/var/lib/postgresql/data
+    networks:
+      - e2e-network
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e-network
+
+  mailpit:
+    image: axllent/mailpit:v1.24
+    networks:
+      - e2e-network
+
+volumes:
+  postgres_data_e2e:
+
+networks:
+  e2e-network:
+    driver: bridge

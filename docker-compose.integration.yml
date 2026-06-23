@@ -1,0 +1,56 @@
+name: releases-integration
+
+services:
+  integration-tests:
+    build:
+      context: .
+      target: integration-tests
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TEST_DATABASE_URL: "postgres://postgres:postgres@db:5432/releases?sslmode=disable"
+      TEST_REDIS_ADDR: "redis:6379"
+    command: go test -tags=integration -v ./tests/integration
+    networks:
+      - test-network
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: releases
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d releases"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data_integration:/var/lib/postgresql/data
+    networks:
+      - test-network
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "6379:6379"
+    networks:
+      - test-network
+
+volumes:
+  postgres_data_integration:
+
+networks:
+  test-network:
+    driver: bridge
