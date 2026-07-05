@@ -60,6 +60,16 @@ Under the hood, this uses `docker-compose.e2e.yml` to execute tests in `tests/e2
 ### Test Artifacts
 If an E2E test fails, Playwright generates screenshots and traces. To view these when running in debug mode, you can map the `test-results` volume or use the provided HTML reporter.
 
+## Architecture Tests
+
+Architectural dependency rules (layer boundaries, forbidden imports) are verified by static analysis tests in `tests/architecture/`. They parse Go imports under `internal/` and `cmd/` and fail when a package violates the rules documented in [architecture.md](architecture.md#dependency-rules).
+
+```bash
+go test ./tests/architecture/...
+```
+
+These run as part of `make test` / `go test ./...`.
+
 ---
 
 ## Summary of Makefile Targets
