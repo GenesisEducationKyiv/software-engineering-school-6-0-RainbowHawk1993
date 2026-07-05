@@ -32,30 +32,30 @@ type dependencyRule struct {
 }
 
 var allowedDependencies = map[dependencyRule]struct{}{
-	{layerPorts, layerDomain}: {},
-	{layerApplication, layerDomain}: {},
-	{layerApplication, layerPorts}: {},
-	{layerApplication, layerPlatform}: {},
-	{layerApplication, layerShared}: {},
-	{layerInfrastructure, layerDomain}: {},
-	{layerInfrastructure, layerPorts}: {},
-	{layerInfrastructure, layerPlatform}: {},
+	{layerPorts, layerDomain}:             {},
+	{layerApplication, layerDomain}:       {},
+	{layerApplication, layerPorts}:        {},
+	{layerApplication, layerPlatform}:     {},
+	{layerApplication, layerShared}:       {},
+	{layerInfrastructure, layerDomain}:    {},
+	{layerInfrastructure, layerPorts}:     {},
+	{layerInfrastructure, layerPlatform}:  {},
 	{layerInfrastructure, layerGenerated}: {},
-	{layerShared, layerPlatform}: {},
-	{layerShared, layerDomain}: {},
-	{layerTransport, layerDomain}: {},
-	{layerTransport, layerPorts}: {},
-	{layerTransport, layerPlatform}: {},
-	{layerTransport, layerGenerated}: {},
-	{layerCmd, layerDomain}: {},
-	{layerCmd, layerPorts}: {},
-	{layerApplication, layerApplication}: {},
-	{layerCmd, layerApplication}: {},
-	{layerCmd, layerInfrastructure}: {},
-	{layerCmd, layerPlatform}: {},
-	{layerCmd, layerShared}: {},
-	{layerCmd, layerTransport}: {},
-	{layerCmd, layerGenerated}: {},
+	{layerShared, layerPlatform}:          {},
+	{layerShared, layerDomain}:            {},
+	{layerTransport, layerDomain}:         {},
+	{layerTransport, layerPorts}:          {},
+	{layerTransport, layerPlatform}:       {},
+	{layerTransport, layerGenerated}:      {},
+	{layerCmd, layerDomain}:               {},
+	{layerCmd, layerPorts}:                {},
+	{layerApplication, layerApplication}:  {},
+	{layerCmd, layerApplication}:          {},
+	{layerCmd, layerInfrastructure}:       {},
+	{layerCmd, layerPlatform}:             {},
+	{layerCmd, layerShared}:               {},
+	{layerCmd, layerTransport}:            {},
+	{layerCmd, layerGenerated}:            {},
 }
 
 var explicitExceptions = map[string]map[string]struct{}{
@@ -111,10 +111,10 @@ func TestLayerDependencies(t *testing.T) {
 	var report strings.Builder
 	report.WriteString("architecture dependency violations:\n")
 	for _, violation := range violations {
-		report.WriteString(fmt.Sprintf("  %s (%s) must not import %s (%s)\n",
+		fmt.Fprintf(&report, "  %s (%s) must not import %s (%s)\n",
 			violation.fromPackage, violation.fromLayer,
 			violation.toPackage, violation.toLayer,
-		))
+		)
 	}
 	t.Fatal(report.String())
 }
